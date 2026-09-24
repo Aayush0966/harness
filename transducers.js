@@ -1,5 +1,10 @@
 // transducers.js — extractOutputs, budget/token symbols, PerFolderOps, PerFileOps, ModelPrices
 // Depends on: engine.js (llm, parse)
+//
+// Step 5 — purity constraint (hard rule, not a style preference):
+// Every transducer must be pure: no closures over external variables, no DOM bindings.
+// A pure function's source text (fn.toString()) fully captures its behaviour — it can be
+// eval()'d back and produce identical results, enabling safe localStorage round-tripping.
 
 const extractOutputs = (operation, results) =>
   operation === 'reduce' ? [results[results.length - 1].output]
@@ -31,13 +36,14 @@ const PerFolderOps = {
   inputFiles: (arg = 0) => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, inputs) => {
     const idx = parseInt(arg);
     if (outputs_.length > idx) {
+      // Chain: pull outputs from a previous step — pure, no FS, unchanged.
       item.inputs = (await outputs_[idx]).outputs.map(content => ({ content, query: item.query, model: item.model }));
     } else {
-      const files = [];
-      for await (const f of item.folder.dirHandle.values())
-        if (f.kind === 'file' && f.name !== 'operation.json') files.push(f);
-      const raw = await Promise.all(files.map(async f => (await f.getFile()).text()));
-      item.inputs = raw.map(content => ({ content, query: item.query, model: item.model }));
+      // Fallback: read text files directly from the in-memory JSON folder.
+      // folder.children replaces dirHandle.values() — no filesystem touch needed.
+      item.inputs = (item.folder.children || [])
+        .filter(c => c.kind === 'file' && c.type === 'text')
+        .map(f => ({ content: f.content, query: item.query, model: item.model }));
     }
     return innerCb(outputs_, { ...item }, i, inputs);
   },

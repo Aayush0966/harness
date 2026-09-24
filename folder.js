@@ -40,18 +40,6 @@ const readFolder = async (dirHandle, path = '') => {
   return Object.freeze(entries);
 };
 
-// Returns a new folder object with changes applied, leaving the original untouched.
-// Recursively merges nested objects; arrays and primitives are replaced outright.
-function deepAssign(target, changes) {
-  const result = Array.isArray(target) ? [...target] : { ...target };
-  for (const key in changes) {
-    const isNestedObject = typeof changes[key] === 'object' && changes[key] !== null
-      && typeof target?.[key] === 'object' && target[key] !== null;
-    result[key] = isNestedObject ? deepAssign(target[key], changes[key]) : changes[key];
-  }
-  return result;
-}
-
 async function createFolders(rawInputFolder) {
   const taskList = [];
   const folders = [];

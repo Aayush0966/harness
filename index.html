@@ -12,8 +12,13 @@
   <span id="folder"></span>
   <button id="runBtn" disabled onclick="main()">Run</button>
 
+  <!-- Step 8: smart prompt -->
+  <input id="prompt" placeholder="Describe your goal…" style="width:40em" disabled>
+  <button id="promptBtn" disabled onclick="smartPrompt()">Go</button>
+
   <div id="viewport"></div>
 
+  <script src="composite.js"></script>
   <script src="folder.js"></script>
   <script src="transducers.js"></script>
   <script src="engine.js"></script>
@@ -22,35 +27,95 @@
     document.getElementById('key').value = localStorage.getItem('iverdream_key') || '';
     document.getElementById('key').oninput = function () { localStorage.setItem('iverdream_key', this.value); };
 
-    let steps = [], parentDir = null, folder = null;
+    // Step 4: three separate state pieces — never merged into one blob.
+    let steps = [], parentDir = null;
+    let folder = null, transducers = {}, uixComponents = {};
+    const activeComponents = new Set();
 
-    const getParam  = key => new URLSearchParams(location.search).get(key);
-    const setParam  = (key, val) => {
+    const getParam = key => new URLSearchParams(location.search).get(key);
+    const setParam = (key, val) => {
       const p = new URLSearchParams(location.search);
       val == null ? p.delete(key) : p.set(key, val);
       history.replaceState(null, '', `?${p}`);
     };
 
-    function mountView(folderObj) {
+    // Step 4: the single place any state change originates and propagates outward.
+    // Put a breakpoint here to trace any race condition or sync issue.
+    function orchestrate(changes) {
+      if (changes.folder) folder = Composite.assign(folder, changes.folder);
+      if (changes.transducers) transducers = Composite.assign(transducers, changes.transducers);
+      if (changes.uixComponents) uixComponents = Composite.assign(uixComponents, changes.uixComponents);
+      for (const component of activeComponents) component.update(folder, transducers, uixComponents);
+    }
+
+    // DOM-only: mount one element per view name (comma-separated in ?view=a,b,c).
+    // State arrives via orchestrate() — nothing is read from the DOM here.
+    function mountView() {
       const viewport = document.getElementById('viewport');
       viewport.innerHTML = '';
-      const view = document.createElement(getParam('view') || 'default-view');
-      viewport.appendChild(view);
-      view.folder = folderObj;
-      viewport.addEventListener('folder-change', e => {
-        folder = deepAssign(folder, e.detail.changes);
-        view.folder = folder;
-      });
+      activeComponents.clear();
+      const names = (getParam('view') || 'default-view').split(',').map(s => s.trim()).filter(Boolean);
+      for (const name of names) {
+        const el = document.createElement(name);
+        viewport.appendChild(el);
+        activeComponents.add(el);
+      }
     }
+
+    // Step 4: three event types, one handler each, all routed through orchestrate().
+    // Wired once — not re-added on every mountView call.
+    const viewport = document.getElementById('viewport');
+    viewport.addEventListener('new-folder', e => orchestrate({ folder: e.detail }));
+    viewport.addEventListener('new-transducer', e => orchestrate({ transducers: e.detail }));
+    viewport.addEventListener('new-uix-component', e => orchestrate({ uixComponents: e.detail }));
+
+    // Step 6: seed built-in libraries into orchestrator state.
+    // They flow into every component's update() as args 2 and 3 from here on.
+    orchestrate({
+      transducers: { PerFileOps, PerFolderOps },
+      uixComponents: { 'test-view': TestView },
+    });
+
+    // Step 7: revive any previously saved dynamic components from localStorage.
+    // eval() is safe here because step-5 purity guarantees fn.toString() fully captures behaviour.
+    const loadDynamic = () => {
+      const saved = JSON.parse(localStorage.getItem('iverdream_dynamic') || '{}');
+      const dynTransducers = {}, dynUIX = {};
+      for (const [name, src] of Object.entries(saved.transducers || {}))
+        try { dynTransducers[name] = eval(`(${src})`); } catch (e) { console.warn('skipped transducer', name, e); }
+      for (const [name, src] of Object.entries(saved.uixComponents || {}))
+        try {
+          const cls = eval(`(${src})`);
+          if (!customElements.get(name)) customElements.define(name, cls);
+          dynUIX[name] = cls;
+        } catch (e) { console.warn('skipped uixComponent', name, e); }
+      if (Object.keys(dynTransducers).length) orchestrate({ transducers: dynTransducers });
+      if (Object.keys(dynUIX).length) orchestrate({ uixComponents: dynUIX });
+    };
+
+    // Step 7: persist any new-transducer / new-uix-component to localStorage before orchestrate() sees it.
+    // Capture phase (true) so the save runs first. detail shape: { name, value } — value.toString() is the source.
+    const saveDynamic = (key, name, value) => {
+      const saved = JSON.parse(localStorage.getItem('iverdream_dynamic') || '{}');
+      saved[key] = { ...(saved[key] || {}), [name]: value.toString() };
+      localStorage.setItem('iverdream_dynamic', JSON.stringify(saved));
+    };
+    viewport.addEventListener('new-transducer', e => saveDynamic('transducers', e.detail.name, e.detail.value), true);
+    viewport.addEventListener('new-uix-component', e => saveDynamic('uixComponents', e.detail.name, e.detail.value), true);
+
+    loadDynamic();
 
     async function pick() {
       try {
         parentDir = await showDirectoryPicker({ mode: 'readwrite' });
         document.getElementById('folder').textContent = parentDir.name;
-        folder = await readFolder(parentDir);
-        window.folderHistory = [folder];
-        mountView(folder);
+        mountView();
+        const initialFolder = await readFolder(parentDir);
+        window.folderHistory = [initialFolder];
+        orchestrate({ folder: initialFolder });
         document.getElementById('runBtn').disabled = false;
+        document.getElementById('prompt').disabled = false;
+        document.getElementById('promptBtn').disabled = false;
       } catch (e) {
         if (e.name !== 'AbortError') throw e;
       }
@@ -62,13 +127,46 @@
       try {
         const newFolderState = await runEngineOnJson(folder, steps);
         window.folderHistory.push(newFolderState);
-        folder = newFolderState;
-        mountView(folder);
-        await writeFolder(parentDir, folder);
+        await writeFolder(parentDir, newFolderState);
+        orchestrate({ folder: newFolderState }); // components stay mounted; state flows in
       } catch (err) {
         console.error("Error during processing:", err);
       }
       document.getElementById('runBtn').disabled = false;
+    }
+
+    // Step 8: smart prompt — reuses llm() and parse() from engine.js, no new fetch code.
+    // LLM receives current state and available views; returns { view, selectedFiles }.
+    async function smartPrompt() {
+      const goal = document.getElementById('prompt').value.trim();
+      if (!goal || !folder) return;
+      const messages = [
+        { role: 'system', content: 'You help navigate a folder-based UI. Reply with JSON only.' },
+        {
+          role: 'user', content: JSON.stringify({
+            goal,
+            currentView: getParam('view'),
+            availableViews: Object.keys(uixComponents),
+            folderName: folder.name,
+            folderChildren: folder.children?.map(c => ({ kind: c.kind, name: c.name })),
+          }) + '\n\nReply: { "view": "<view-name>", "selectedFiles": ["<name>", ...], "reason": "<brief>" }'
+        },
+      ];
+      try {
+        const res = await llm('google/gemini-flash', { messages, response_format: { type: 'json_object' } });
+        const { view, selectedFiles = [] } = parse(res.choices[0].message.content);
+        // Append the LLM-chosen view to any already-mounted views.
+        if (view) {
+          const current = (getParam('view') || '').split(',').map(s => s.trim()).filter(Boolean);
+          if (!current.includes(view)) current.push(view);
+          setParam('view', current.join(','));
+        }
+        if (selectedFiles.length) setParam('files', selectedFiles.join(','));
+        mountView();
+        orchestrate({});
+      } catch (err) {
+        console.error('Smart prompt error:', err);
+      }
     }
   </script>
 </body>
