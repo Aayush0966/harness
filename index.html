@@ -109,6 +109,7 @@
       try {
         parentDir = await showDirectoryPicker({ mode: 'readwrite' });
         document.getElementById('folder').textContent = parentDir.name;
+        steps = await createFolders(parentDir).taskList;
         mountView();
         const initialFolder = await readFolder(parentDir);
         window.folderHistory = [initialFolder];
