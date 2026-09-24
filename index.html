@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>IverDream Harness</title>
+</head>
+
+<body>
+  <input id="key" type="password" placeholder="OpenRouter API Key">
+  <button onclick="pick()">Pick Folder</button>
+  <span id="folder"></span>
+  <button id="runBtn" disabled onclick="main()">Run</button>
+
+  <div id="viewport"></div>
+
+  <script src="folder.js"></script>
+  <script src="transducers.js"></script>
+  <script src="engine.js"></script>
+  <script src="libview.js"></script>
+  <script>
+    document.getElementById('key').value = localStorage.getItem('iverdream_key') || '';
+    document.getElementById('key').oninput = function () { localStorage.setItem('iverdream_key', this.value); };
+
+    let steps = [], parentDir = null, folder = null;
+
+    const getParam  = key => new URLSearchParams(location.search).get(key);
+    const setParam  = (key, val) => {
+      const p = new URLSearchParams(location.search);
+      val == null ? p.delete(key) : p.set(key, val);
+      history.replaceState(null, '', `?${p}`);
+    };
+
+    function mountView(folderObj) {
+      const viewport = document.getElementById('viewport');
+      viewport.innerHTML = '';
+      const view = document.createElement(getParam('view') || 'default-view');
+      viewport.appendChild(view);
+      view.folder = folderObj;
+      viewport.addEventListener('folder-change', e => {
+        folder = deepAssign(folder, e.detail.changes);
+        view.folder = folder;
+      });
+    }
+
+    async function pick() {
+      try {
+        parentDir = await showDirectoryPicker({ mode: 'readwrite' });
+        document.getElementById('folder').textContent = parentDir.name;
+        folder = await readFolder(parentDir);
+        window.folderHistory = [folder];
+        mountView(folder);
+        document.getElementById('runBtn').disabled = false;
+      } catch (e) {
+        if (e.name !== 'AbortError') throw e;
+      }
+    }
+
+    async function main() {
+      if (!document.getElementById('key').value || !folder) return;
+      document.getElementById('runBtn').disabled = true;
+      try {
+        const newFolderState = await runEngineOnJson(folder, steps);
+        window.folderHistory.push(newFolderState);
+        folder = newFolderState;
+        mountView(folder);
+        await writeFolder(parentDir, folder);
+      } catch (err) {
+        console.error("Error during processing:", err);
+      }
+      document.getElementById('runBtn').disabled = false;
+    }
+  </script>
+</body>
+
+</html>
