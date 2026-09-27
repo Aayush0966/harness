@@ -17,11 +17,13 @@ const tokenMaxLimit = Symbol("tokenMaxLimit"); // For Tokens
 const tokenSpent = Symbol("tokenSpent");
 
 const ModelPrices = {
-  "deepseek/deepseek-v4-flash": 0.14,
-  "google/gemini-flash": 0.35,
+  "deepseek/deepseek-chat": 0.14,
+  "deepseek/deepseek-r1": 0.55,
+  "google/gemini-2.0-flash-001": 0.10,
+  "openai/gpt-4o-mini": 0.15,
   "openai/gpt-4o": 5.00,
   "anthropic/claude-3.5-sonnet": 3.00,
-  "default": 1.00 // fallback price per 1 million tokens
+  "default": 0.20 // fallback price per 1 million tokens
 };
 
 // PerFolderOps transducer shape: arg => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, inputs) => result

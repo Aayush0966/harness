@@ -33,4 +33,30 @@ class TestView extends HTMLElement {
     });
   }
 }
+class DefaultView extends HTMLElement {
+  update(folder, transducers, uixComponents) {
+    if (folder === this._folder) return;
+    this._folder = folder;
+    this.render();
+  }
+
+  render() {
+    if (!this._folder) {
+      this.innerHTML = '<p style="color:#666; font-style:italic">Pick a folder to start inspecting.</p>';
+      return;
+    }
+    const files = (this._folder.children || []).filter(c => c.kind === 'file');
+    this.innerHTML = `
+      <div style="font-family:sans-serif; margin-top:1em; border:1px solid #ccc; padding:12px; border-radius:6px">
+        <h3 style="margin-top:0">📁 ${this._folder.name}</h3>
+        <p><strong>Files:</strong> ${files.length}</p>
+        <ul>
+          ${files.map(f => `<li><strong>${f.name}</strong> (${f.type}): <code style="background:#f4f4f4; padding:2px 4px">${typeof f.content === 'string' ? f.content.slice(0, 100) : '[binary]'}</code></li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+}
+
 customElements.define('test-view', TestView);
+customElements.define('default-view', DefaultView);
