@@ -8,7 +8,7 @@
 // Step 5 — purity constraint (hard rule):
 // Every UIX component class must be pure: no closures over external variables, no bindings to
 // specific DOM globals. Its source text must fully capture its behaviour so it can safely
-// round-trip through localStorage/eval for dynamic loading (step 7).
+// round-trip through localStorage/eval for custom component loading (step 7).
 
 class TestView extends HTMLElement {
   // Rule 1: constructor stays empty of state.

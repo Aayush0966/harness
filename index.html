@@ -67,7 +67,7 @@
     const viewport = document.getElementById('viewport');
     viewport.addEventListener('new-folder', e => orchestrate({ folder: e.detail }));
     viewport.addEventListener('new-transducer', e => orchestrate({ transducers: e.detail }));
-    viewport.addEventListener('new-uix-component', e => saveDynamic('uixComponents', e.detail.name, e.detail.value), true);
+    viewport.addEventListener('new-uix-component', e => saveCustom('uixComponents', e.detail.name, e.detail.value), true);
     // Step 6: seed built-in libraries into orchestrator state.
     // They flow into every component's update() as args 2 and 3 from here on.
     orchestrate({
@@ -75,33 +75,33 @@
       uixComponents: { 'test-view': TestView, 'default-view': DefaultView },
     });
 
-    // Step 7: revive any previously saved dynamic components from localStorage.
+    // Step 7: revive any previously saved custom components from localStorage.
     // eval() is safe here because step-5 purity guarantees fn.toString() fully captures behaviour.
-    const loadDynamic = () => {
-      const saved = JSON.parse(localStorage.getItem('iverdream_dynamic') || '{}');
-      const dynTransducers = {}, dynUIX = {};
+    const loadCustom = () => {
+      const saved = JSON.parse(localStorage.getItem('iverdream_custom') || '{}');
+      const customTransducers = {}, customUIX = {};
       for (const [name, src] of Object.entries(saved.transducers || {}))
-        try { dynTransducers[name] = eval(`(${src})`); } catch (e) { console.warn('skipped transducer', name, e); }
+        try { customTransducers[name] = eval(`(${src})`); } catch (e) { console.warn('skipped transducer', name, e); }
       for (const [name, src] of Object.entries(saved.uixComponents || {}))
         try {
           const cls = eval(`(${src})`);
           if (!customElements.get(name)) customElements.define(name, cls);
-          dynUIX[name] = cls;
+          customUIX[name] = cls;
         } catch (e) { console.warn('skipped uixComponent', name, e); }
-      if (Object.keys(dynTransducers).length) orchestrate({ transducers: dynTransducers });
-      if (Object.keys(dynUIX).length) orchestrate({ uixComponents: dynUIX });
+      if (Object.keys(customTransducers).length) orchestrate({ transducers: customTransducers });
+      if (Object.keys(customUIX).length) orchestrate({ uixComponents: customUIX });
     };
 
     // Step 7: persist any new-transducer / new-uix-component to localStorage before orchestrate() sees it.
     // Capture phase (true) so the save runs first. detail shape: { name, value } — value.toString() is the source.
-    const saveDynamic = (key, name, value) => {
-      const saved = JSON.parse(localStorage.getItem('iverdream_dynamic') || '{}');
+    const saveCustom = (key, name, value) => {
+      const saved = JSON.parse(localStorage.getItem('iverdream_custom') || '{}');
       saved[key] = { ...(saved[key] || {}), [name]: value.toString() };
-      localStorage.setItem('iverdream_dynamic', JSON.stringify(saved));
+      localStorage.setItem('iverdream_custom', JSON.stringify(saved));
     };
     viewport.addEventListener('new-transducer', e => orchestrate({ transducers: { [e.detail.name]: e.detail.value } }));
     viewport.addEventListener('new-uix-component', e => orchestrate({ uixComponents: { [e.detail.name]: e.detail.value } }));
-    loadDynamic();
+    loadCustom();
 
     async function pick() {
       try {
@@ -136,55 +136,64 @@
 
     // Step 8: smart prompt — reuses llm() and parse() from engine.js, no new fetch code.
     // LLM receives current state and available views; returns { view, selectedFiles }.
-async function smartPrompt() {
-  const goal = document.getElementById('prompt').value.trim();
-  if (!goal || !folder) return;
+    async function smartPrompt() {
+      const goal = document.getElementById('prompt').value.trim();
+      if (!goal || !folder) return;
 
-  const referenceView = `class SingleFileView extends HTMLElement {
+      const referenceView = `class SingleFileView extends HTMLElement {
   update(folder, transducers, uixComponents) {
     const names = (getParam('files') || '').split(',').filter(Boolean);
-    const file = folder.children.find(c => c.kind === 'file' && names.includes(c.name));
-    this.textContent = file ? file.content : 'No file selected';
+    
+    // Fallback: If no files are specified in the URL, default to the very first file in the folder
+    const file = folder.children.find(c => c.kind === 'file' && (names.length === 0 || names.includes(c.name)));
+    
+    this.textContent = file ? file.content : 'No files found in this folder';
   }
 }`;
 
-  const messages = [
-    { role: 'system', content:
-      'You write native Web Component view classes for a folder-based UI. ' +
-      'A view is a class with update(folder, transducers, uixComponents), called whenever state changes. ' +
-      "Read the current file selection yourself via getParam('files') (comma-separated names) — never expect selection as an argument. " +
-      'Views must use file.content, not just file.name — a view that only lists names is wrong. ' +
-      'If no existing view fits the goal, write a new one. Reply with JSON only.'
-    },
-    { role: 'user', content: JSON.stringify({
-        goal, currentView: getParam('view'), availableViews: Object.keys(uixComponents),
-        folderName: folder.name, folderChildren: folder.children?.map(c => ({ kind: c.kind, name: c.name })),
-        referenceView,
-      }) + '\n\nReply: { "view": "<existing-view-name-or-null>", "selectedFiles": [...], "newView": { "name": "<tag-name>", "source": "<full class ... extends HTMLElement>" } }'
-    },
-  ];
+      const messages = [
+        {
+          role: 'system', content:
+            'You write native Web Component view classes for a folder-based UI. ' +
+            'A view is a class with update(folder, transducers, uixComponents), called whenever state changes. ' +
+            "Read the current file selection yourself via getParam('files') (comma-separated names) — never expect selection as an argument. " +
+            'Views must use file.content, not just file.name — a view that only lists names is wrong. ' +
+            'CRITICAL RULES: ' +
+            '1. Do NOT call customElements.define in the source; return only the class definition. ' +
+            '2. The "name" in your JSON MUST be lowercase and contain a hyphen (e.g., "my-custom-view"). ' +
+            '3. Your code MUST be 100% pure. Do not use external closures or global variables; everything must be self-contained. ' +
+            'If no existing view fits the goal, write a new one. Reply with JSON only.'
+        },
+        {
+          role: 'user', content: JSON.stringify({
+            goal, currentView: getParam('view'), availableViews: Object.keys(uixComponents),
+            folderName: folder.name, folderChildren: folder.children?.map(c => ({ kind: c.kind, name: c.name })),
+            referenceView,
+          }) + '\n\nReply: { "view": "", "selectedFiles": [...], "newView": { "name": "", "source": "" } }'
+        },
+      ];
 
-  try {
-    const res = await llm('deepseek/deepseek-chat', { messages, response_format: { type: 'json_object' } });
-    const { view, selectedFiles = [], newView } = parse(res.choices[0].message.content);
+      try {
+        const res = await llm('deepseek/deepseek-chat', { messages, response_format: { type: 'json_object' } });
+        const { view, selectedFiles = [], newView } = parse(res.choices[0].message.content);
 
-    if (newView && !customElements.get(newView.name)) {
-      const cls = eval(`(${newView.source})`);
-      customElements.define(newView.name, cls);
-      viewport.dispatchEvent(new CustomEvent('new-uix-component', { bubbles: true, detail: { name: newView.name, value: cls } }));
+        if (newView && !customElements.get(newView.name)) {
+          const cls = eval(`(${newView.source})`);
+          customElements.define(newView.name, cls);
+          viewport.dispatchEvent(new CustomEvent('new-uix-component', { bubbles: true, detail: { name: newView.name, value: cls } }));
+        }
+
+        const viewName = newView?.name || view;
+        const current = new Set((getParam('view') || '').split(',').filter(Boolean));
+        if (viewName) setParam('view', [...current.add(viewName)].join(','));
+        if (selectedFiles.length) setParam('files', selectedFiles.join(','));
+
+        mountView();
+        orchestrate({});
+      } catch (err) {
+        console.error('Smart prompt error:', err);
+      }
     }
-
-    const viewName = newView?.name || view;
-    const current = new Set((getParam('view') || '').split(',').filter(Boolean));
-    if (viewName) setParam('view', [...current.add(viewName)].join(','));
-    if (selectedFiles.length) setParam('files', selectedFiles.join(','));
-
-    mountView();
-    orchestrate({});
-  } catch (err) {
-    console.error('Smart prompt error:', err);
-  }
-}
   </script>
 </body>
 

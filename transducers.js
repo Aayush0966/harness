@@ -104,26 +104,32 @@ const PerFileOps = {
   },
 
   Boolean: config => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, inputs) => {
-    const schema = { name: "boolean_result", strict: true, schema: {
-      type: "object", properties: { value: { type: "boolean" } }, required: ["value"], additionalProperties: false
-    }};
+    const schema = {
+      name: "boolean_result", strict: true, schema: {
+        type: "object", properties: { value: { type: "boolean" } }, required: ["value"], additionalProperties: false
+      }
+    };
     const res = await PerFileOps.Json(schema)(innerCb, rootCtx, groupCtx)(outputs_, item, i, inputs);
     return { ...res, output: res.output.value };
   },
 
   Tagging: config => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, inputs) => {
-    const schema = { name: "tagging_result", strict: true, schema: {
-      type: "object", properties: { tags: { type: "array", items: { type: "string" } } }, required: ["tags"], additionalProperties: false
-    }};
+    const schema = {
+      name: "tagging_result", strict: true, schema: {
+        type: "object", properties: { tags: { type: "array", items: { type: "string" } } }, required: ["tags"], additionalProperties: false
+      }
+    };
     const res = await PerFileOps.Json(schema)(innerCb, rootCtx, groupCtx)(outputs_, item, i, inputs);
     const tags = config?.allowedTags ? res.output.tags.filter(t => config.allowedTags.includes(t)) : res.output.tags;
     return { ...res, output: tags };
   },
 
   Scoring: config => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, inputs) => {
-    const schema = { name: "scoring_result", strict: true, schema: {
-      type: "object", properties: { score: { type: "number" } }, required: ["score"], additionalProperties: false
-    }};
+    const schema = {
+      name: "scoring_result", strict: true, schema: {
+        type: "object", properties: { score: { type: "number" } }, required: ["score"], additionalProperties: false
+      }
+    };
     const res = await PerFileOps.Json(schema)(innerCb, rootCtx, groupCtx)(outputs_, item, i, inputs);
     const score = res.output.score;
     if (score < 0 || score > 1) throw new Error(`Scoring: model returned out-of-range score: ${score}`);
@@ -131,9 +137,11 @@ const PerFileOps = {
   },
 
   Spread: config => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, inputs) => {
-    const schema = { name: "spread_result", strict: true, schema: {
-      type: "object", properties: { items: { type: "array", items: { type: "string" } } }, required: ["items"], additionalProperties: false
-    }};
+    const schema = {
+      name: "spread_result", strict: true, schema: {
+        type: "object", properties: { items: { type: "array", items: { type: "string" } } }, required: ["items"], additionalProperties: false
+      }
+    };
     const res = await PerFileOps.Json(schema)(innerCb, rootCtx, groupCtx)(outputs_, item, i, inputs);
     return { ...res, output: res.output.items };
   },
