@@ -1,5 +1,5 @@
 // transducers.js — extractOutputs, budget/token symbols, PerFolderOps, PerFileOps, ModelPrices
-// Depends on: engine.js (llm, parse)
+// Depends on: engine.js (llm)
 //
 // Step 5 — purity constraint (hard rule, not a style preference):
 // Every transducer must be pure: no closures over external variables, no DOM bindings.
@@ -73,7 +73,7 @@ const PerFileOps = {
   _root: async (outputs_, item, i, inputs) => {
     const res = await llm(item.model, item.llmOptions);
     return {
-      output: parse(res.choices[0].message.content),
+      output: JSON.parse(res.choices[0].message.content),
       tokens: res.usage?.total_tokens || 0,
       model: item.model
     };

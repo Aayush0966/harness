@@ -29,23 +29,23 @@
 
     // Step 4: three separate state pieces — never merged into one blob.
     let steps = [], parentDir = null;
-    let folder = null, transducers = {}, uixComponents = {};
+    let history = [], transducers = {}, uixComponents = {};
     const activeComponents = new Set();
 
     const getParam = key => new URLSearchParams(location.search).get(key);
     const setParam = (key, val) => {
       const p = new URLSearchParams(location.search);
       val == null ? p.delete(key) : p.set(key, val);
-      history.replaceState(null, '', `?${p}`);
+      window.history.replaceState(null, '', `?${p}`);
     };
 
     // Step 4: the single place any state change originates and propagates outward.
     // Put a breakpoint here to trace any race condition or sync issue.
     function orchestrate(changes) {
-      if (changes.folder) folder = Composite.assign(folder, changes.folder);
-      if (changes.transducers) transducers = Composite.assign(transducers, changes.transducers);
-      if (changes.uixComponents) uixComponents = Composite.assign(uixComponents, changes.uixComponents);
-      for (const component of activeComponents) component.update(folder, transducers, uixComponents);
+      if (changes.folder) history = [...history, changes.folder];
+      if (changes.transducers) transducers = { ...transducers, ...changes.transducers };
+      if (changes.uixComponents) uixComponents = { ...uixComponents, ...changes.uixComponents };
+      for (const component of activeComponents) component.update(history, transducers, uixComponents);
     }
 
     // DOM-only: mount one element per view name (comma-separated in ?view=a,b,c).
@@ -62,14 +62,8 @@
       }
     }
 
-    // Step 4: three event types, one handler each, all routed through orchestrate().
-    // Wired once — not re-added on every mountView call.
     const viewport = document.getElementById('viewport');
     viewport.addEventListener('new-folder', e => orchestrate({ folder: e.detail }));
-    viewport.addEventListener('new-transducer', e => orchestrate({ transducers: e.detail }));
-    viewport.addEventListener('new-uix-component', e => saveCustom('uixComponents', e.detail.name, e.detail.value), true);
-    // Step 6: seed built-in libraries into orchestrator state.
-    // They flow into every component's update() as args 2 and 3 from here on.
     orchestrate({
       transducers: { PerFileOps, PerFolderOps },
       uixComponents: { 'test-view': TestView, 'default-view': DefaultView },
@@ -99,8 +93,16 @@
       saved[key] = { ...(saved[key] || {}), [name]: value.toString() };
       localStorage.setItem('iverdream_custom', JSON.stringify(saved));
     };
-    viewport.addEventListener('new-transducer', e => orchestrate({ transducers: { [e.detail.name]: e.detail.value } }));
-    viewport.addEventListener('new-uix-component', e => orchestrate({ uixComponents: { [e.detail.name]: e.detail.value } }));
+    // detail shape for both: { name, value } — confirmed by all dispatch sites.
+    // Capture phase (true) so saveCustom persists before orchestrate() propagates to components.
+    viewport.addEventListener('new-transducer', e => {
+      saveCustom('transducers', e.detail.name, e.detail.value);
+      orchestrate({ transducers: { [e.detail.name]: e.detail.value } });
+    }, true);
+    viewport.addEventListener('new-uix-component', e => {
+      saveCustom('uixComponents', e.detail.name, e.detail.value);
+      orchestrate({ uixComponents: { [e.detail.name]: e.detail.value } });
+    }, true);
     loadCustom();
 
     async function pick() {
@@ -110,8 +112,7 @@
         steps = (await createFolders(parentDir)).taskList;
         mountView();
         const initialFolder = await readFolder(parentDir);
-        window.folderHistory = [initialFolder];
-        orchestrate({ folder: initialFolder });
+        orchestrate({ folder: Composite.consume(initialFolder) });
         document.getElementById('runBtn').disabled = false;
         document.getElementById('prompt').disabled = false;
         document.getElementById('promptBtn').disabled = false;
@@ -121,11 +122,12 @@
     }
 
     async function main() {
-      if (!document.getElementById('key').value || !folder) return;
+      if (!document.getElementById('key').value) return;
       document.getElementById('runBtn').disabled = true;
       try {
-        const newFolderState = await runEngineOnJson(folder, steps);
-        window.folderHistory.push(newFolderState);
+        const currentFolder = history[history.length - 1];
+        const outputs = await runEngineOnJson(currentFolder, steps);
+        const newFolderState = applyOutputs(currentFolder, outputs);
         await writeFolder(parentDir, newFolderState);
         orchestrate({ folder: newFolderState }); // components stay mounted; state flows in
       } catch (err) {
@@ -134,18 +136,19 @@
       document.getElementById('runBtn').disabled = false;
     }
 
-    // Step 8: smart prompt — reuses llm() and parse() from engine.js, no new fetch code.
+    // Step 8: smart prompt — reuses llm() from engine.js, no new fetch code.
     // LLM receives current state and available views; returns { view, selectedFiles }.
     async function smartPrompt() {
       const goal = document.getElementById('prompt').value.trim();
-      if (!goal || !folder) return;
+      if (!goal || history.length === 0) return;
 
       const referenceView = `class SingleFileView extends HTMLElement {
-  update(folder, transducers, uixComponents) {
+  update(history, transducers, uixComponents) {
     const names = (getParam('files') || '').split(',').filter(Boolean);
+    const currentFolder = history[history.length - 1]; // Get latest state
     
     // Fallback: If no files are specified in the URL, default to the very first file in the folder
-    const file = folder.children.find(c => c.kind === 'file' && (names.length === 0 || names.includes(c.name)));
+    const file = currentFolder.children.find(c => c.kind === 'file' && (names.length === 0 || names.includes(c.name)));
     
     this.textContent = file ? file.content : 'No files found in this folder';
   }
@@ -155,24 +158,25 @@
         {
           role: 'system', content:
             'You write native Web Component view classes for a folder-based UI. ' +
-            'A view is a class with update(folder, transducers, uixComponents), called whenever state changes. ' +
+            'A view is a class with update(history, transducers, uixComponents), called whenever state changes. ' +
             "Read the current file selection yourself via getParam('files') (comma-separated names) — never expect selection as an argument. " +
             'Views must use file.content, not just file.name — a view that only lists names is wrong. ' +
             'CRITICAL RULES: ' +
             '1. Do NOT call customElements.define in the source; return only the class definition. ' +
             '2. The "name" in your JSON MUST be lowercase and contain a hyphen (e.g., "my-custom-view"). ' +
             '3. Your code MUST be 100% pure. Do not use external closures or global variables; everything must be self-contained. ' +
-            'If no existing view fits the goal, write a new one. Reply with JSON only.'
+            '4. STRICT REUSE: You MUST check availableViews first. If an existing view fits the goal, put its name in "view" and set "newView" to null. ' +
+            '5. ONLY write a "newView" if absolutely no existing view can handle the task. Reply with JSON only.'
         },
         {
           role: 'user', content: JSON.stringify({
             goal, currentView: getParam('view'), availableViews: Object.keys(uixComponents),
-            folderName: folder.name, folderChildren: folder.children?.map(c => ({ kind: c.kind, name: c.name })),
+            folderName: history[history.length - 1].name, folderChildren: history[history.length - 1].children?.map(c => ({ kind: c.kind, name: c.name })),
             referenceView,
-          }) + '\n\nReply: { "view": "", "selectedFiles": [...], "newView": { "name": "", "source": "" } }'
+          }) + '\n\nReply: { "view": "", "selectedFiles": [...], "newView": null | { "name": "", "source": "" } }'
         },
       ];
-
+      
       try {
         const res = await llm('deepseek/deepseek-chat', { messages, response_format: { type: 'json_object' } });
         const { view, selectedFiles = [], newView } = JSON.parse(res.choices[0].message.content);

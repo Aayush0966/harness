@@ -1,6 +1,3 @@
-// folder.js — File system I/O: createFolders, save, readFolder
-// Binary files are base64-encoded. Text files are stored as plain strings.
-// Handles reading folder structures and saving processing results.
 
 const TEXT_TYPES = new Set([
   'text/plain', 'text/html', 'text/css', 'text/javascript', 'text/markdown',
@@ -37,12 +34,11 @@ const readFolder = async (dirHandle, path = '') => {
     }
   }
   entries.children.sort((a, b) => a.name.localeCompare(b.name));
-  return Object.freeze(entries);
+  return entries;
 };
 
 async function createFolders(rawInputFolder) {
   const taskList = [];
-  const folders = [];
   const entries = [];
   for await (const entry of rawInputFolder.values())
     if (entry.kind === 'directory') entries.push(entry);
@@ -52,24 +48,11 @@ async function createFolders(rawInputFolder) {
     try {
       const op = JSON.parse(await (await (await entry.getFileHandle('operation.json')).getFile()).text());
       taskList.push({ name: entry.name, dirHandle: entry, ...op });
-      folders.push({ name: entry.name, dirHandle: entry });
     } catch (e) {
       // skip folders without a valid operation.json
     }
   }
-  return { taskList, folders };
-}
-
-async function save(res, rawOutputFolder) {
-  for (let i = 0; i < res.length; i++) {
-    const { folder, outputs } = res[i];
-    const stepDir = await rawOutputFolder.getDirectoryHandle(folder.name, { create: true });
-    for (let j = 0; j < outputs.length; j++) {
-      const w = await (await stepDir.getFileHandle(j + '.json', { create: true })).createWritable();
-      await w.write(JSON.stringify(outputs[j], null, 2));
-      await w.close();
-    }
-  }
+  return { taskList };
 }
 
 async function writeFolder(dirHandle, folderObj) {
@@ -89,4 +72,20 @@ async function writeFolder(dirHandle, folderObj) {
       await w.close();
     }
   }
+}
+
+function applyOutputs(topFolder, outputs) {
+  const { folder: stepFolder, outputs: finalOutputs } = outputs[outputs.length - 1];
+  const files = stepFolder.children.filter(c => c.kind === 'file' && c.type === 'text');
+  const nonFiles = stepFolder.children.filter(c => c.kind !== 'file' || c.type !== 'text');
+  const updatedFiles = finalOutputs.map((out, i) => {
+    const base = files[i] ?? { kind: 'file', name: `output-${i}.json`, type: 'text' };
+    const content = typeof out === 'string' ? out : JSON.stringify(out, null, 2);
+    return { ...base, content };
+  });
+  const updatedStepFolder = Composite.set(stepFolder).children([...nonFiles, ...updatedFiles]);
+  const updatedChildren = topFolder.children.map(c =>
+    c.kind === 'directory' && c.name === stepFolder.name ? updatedStepFolder : c
+  );
+  return Composite.set(topFolder).children(updatedChildren);
 }
