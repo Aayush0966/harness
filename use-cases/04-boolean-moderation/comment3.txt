@@ -1,0 +1,1 @@
+Could you clarify how step 3 handles network timeouts when the API is unreachable?

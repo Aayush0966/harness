@@ -1,0 +1,1 @@
+Alice: Finished migrating the authentication endpoints to JWT. Starting work on OAuth refresh tokens today. Blocker: waiting on staging API keys from DevOps.

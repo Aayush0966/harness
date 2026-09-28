@@ -175,7 +175,7 @@
 
       try {
         const res = await llm('deepseek/deepseek-chat', { messages, response_format: { type: 'json_object' } });
-        const { view, selectedFiles = [], newView } = parse(res.choices[0].message.content);
+        const { view, selectedFiles = [], newView } = JSON.parse(res.choices[0].message.content);
 
         if (newView && !customElements.get(newView.name)) {
           const cls = eval(`(${newView.source})`);

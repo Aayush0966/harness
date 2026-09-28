@@ -9,13 +9,6 @@ const llm = (model, llmOptions) => fetch('https://openrouter.ai/api/v1/chat/comp
   return r.json();
 });
 
-const parse = t => {
-  try { return JSON.parse(t.trim().replace(/^```(?:json)?\s*\n?/, '').replace(/\n?\s*```$/, '')); }
-  catch { return t; }
-};
-
-
-
 const Transducer = (name, arg, dict) => {
   if (name in dict)
     return dict[name](arg);
