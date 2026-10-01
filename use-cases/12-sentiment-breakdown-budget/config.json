@@ -1,0 +1,34 @@
+{
+  "llmOptions": { "model": "deepseek/deepseek-chat" },
+  "query": {
+    "prefix": "You are an automated customer escalation triage system.",
+    "text": "Analyze the following customer ticket for sentiment, urgency, and recommended next actions:",
+    "postface": "Be rigorous in assessing urgency. High urgency corresponds to potential churn or system downtime."
+  },
+  "perFolderOps": [
+    { "name": "inputFiles", "arg": 0 }
+  ],
+  "perFileOps": [
+    { "name": "Budget", "arg": "0.02" },
+    { "name": "FillQuery", "arg": null },
+    {
+      "name": "Json",
+      "arg": {
+        "name": "triage_result",
+        "strict": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "sentimentScore": { "type": "number" },
+            "urgencyScore": { "type": "number" },
+            "primaryEmotion": { "type": "string" },
+            "churnRisk": { "type": "boolean" },
+            "recommendedAction": { "type": "string" }
+          },
+          "required": ["sentimentScore", "urgencyScore", "primaryEmotion", "churnRisk", "recommendedAction"],
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

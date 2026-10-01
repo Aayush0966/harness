@@ -13,7 +13,8 @@
 class TestView extends HTMLElement {
   // Rule 1: constructor stays empty of state.
 
-  update(folder, transducers, uixComponents) {
+  update(history, transducers, uixComponents) {
+    const folder = history?.[history.length - 1];
     if (folder === this._folder) return; // Rule 2: cheap skip via reference equality
     this._folder = folder;
     this.render();
@@ -34,7 +35,8 @@ class TestView extends HTMLElement {
   }
 }
 class DefaultView extends HTMLElement {
-  update(folder, transducers, uixComponents) {
+  update(history, transducers, uixComponents) {
+    const folder = history?.[history.length - 1];
     if (folder === this._folder) return;
     this._folder = folder;
     this.render();
@@ -45,13 +47,19 @@ class DefaultView extends HTMLElement {
       this.innerHTML = '<p style="color:#666; font-style:italic">Pick a folder to start inspecting.</p>';
       return;
     }
-    const files = (this._folder.children || []).filter(c => c.kind === 'file');
+    const getFiles = (node, prefix = '') =>
+      (node?.children || []).flatMap(c =>
+        c.kind === 'file'
+          ? [{ ...c, filename: prefix ? `${prefix}/${c.filename}` : c.filename }]
+          : getFiles(c, prefix ? `${prefix}/${c.name}` : c.name)
+      );
+    const files = getFiles(this._folder);
     this.innerHTML = `
       <div style="font-family:sans-serif; margin-top:1em; border:1px solid #ccc; padding:12px; border-radius:6px">
         <h3 style="margin-top:0">📁 ${this._folder.name}</h3>
         <p><strong>Files:</strong> ${files.length}</p>
         <ul>
-          ${files.map(f => `<li><strong>${f.name}</strong> (${f.type}): <code style="background:#f4f4f4; padding:2px 4px">${typeof f.content === 'string' ? f.content.slice(0, 100) : '[binary]'}</code></li>`).join('')}
+          ${files.map(f => `<li><strong>${f.filename}</strong>: <code style="background:#f4f4f4; padding:2px 4px">${typeof f.data === 'string' ? f.data.slice(0, 100) : '[binary]'}</code></li>`).join('')}
         </ul>
       </div>
     `;

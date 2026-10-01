@@ -235,6 +235,61 @@ function deleteImpl(obj, path, consume) {
   return root;
 }
 
+function placeTrace(skip = 0, SKIPS = []) {
+  const stack = new Error().stack.split("\n").map(line => line.split("(")[0].trim().split(" ").pop());
+  for (let i = skip + 1; i < stack.length - 1; i++) {
+    const name = stack[i];
+    if (!SKIPS.includes(name))
+      return name;
+  }
+  return stack.at(-1);
+}
+const { register, unregister, getHistory, log } = (function () {
+
+  const history = new Map();
+  function log(oldObj, obj, path) {
+    if (oldObj === obj) return;
+    const tail = history.get(oldObj);
+    if (!tail) return;
+    const caller = placeTrace(2, ["rawSet", "rawDelete", "Object.apply", "Composite.rawSet", "Composite.rawDelete", "anonymous"]);
+    tail.unshift({ obj, path, caller, time: performance.now() });
+    history.set(obj, tail);
+    history.delete(oldObj);
+  }
+  function register(obj) {
+    if (history.has(obj)) throw new Error("an identical root already exists");
+    history.set(obj, [{ obj, path: [], caller: placeTrace(2, ["register", "anonymous"]), time: performance.now() }]);
+  }
+  function unregister(now) {
+    history.delete(now);
+  }
+
+  function getHistory(root) {
+    return history.get(root).slice();
+  }
+  return { register, unregister, getHistory, log };
+})();
+
+const rawSetOg = setImpl;
+const rawDeleteOg = deleteImpl;
+let skipLog;
+
+setImpl = function (root, path, value, consume) {
+  const newRoot = rawSetOg(root, path, value, consume);
+  !skipLog && log(root, newRoot, path);
+  return newRoot;
+};
+
+deleteImpl = function (root, path, consume) {
+  skipLog = true;
+  const newRoot = rawDeleteOg(root, path, consume);
+  skipLog = false;
+  log(root, newRoot, path);
+  return newRoot;
+};
+
+Object.assign(Composite, { register, unregister, getHistory });
+
 const Lense = FN => function (root) {
   let spent = false;
   function proxy(path = []) {

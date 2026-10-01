@@ -1,0 +1,34 @@
+{
+  "llmOptions": { "model": "deepseek/deepseek-chat" },
+  "query": {
+    "prefix": "You are a privacy compliance and data sanitization engine.",
+    "text": "Scan the following customer support chat for sensitive PII (emails, phone numbers, credit card numbers, SSNs, API keys). Return a redacted version with all PII replaced with markers like [EMAIL], [PHONE], [REDACTED_KEY]:",
+    "postface": "Ensure all non-PII conversation context is completely preserved."
+  },
+  "perFolderOps": [
+    { "name": "inputFiles", "arg": 0 }
+  ],
+  "perFileOps": [
+    { "name": "FillQuery", "arg": null },
+    {
+      "name": "Json",
+      "arg": {
+        "name": "pii_redaction",
+        "strict": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "hasPII": { "type": "boolean" },
+            "piiTypesFound": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "sanitizedText": { "type": "string" }
+          },
+          "required": ["hasPII", "piiTypesFound", "sanitizedText"],
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "dialect": "postgresql",
+  "explanation": "To calculate the monthly repeat customer purchase rate for 2025, we need to:\n1. Identify users who placed orders in consecutive months (M and M-1)\n2. Count these repeat customers for each month\n3. Calculate the rate by dividing by the total customers in month M\n\nI'll use date_trunc to normalize timestamps to months, LAG window function to check previous month purchases, and proper date filtering.",
+  "sql": "WITH monthly_customers AS (\n  SELECT \n    DATE_TRUNC('month', o.created_at) AS month,\n    o.user_id\n  FROM orders o\n  WHERE o.status != 'cancelled'\n    AND o.created_at BETWEEN '2025-01-01' AND '2025-12-31'\n  GROUP BY DATE_TRUNC('month', o.created_at), o.user_id\n),\n\nconsecutive_months AS (\n  SELECT \n    month,\n    user_id,\n    LAG(month) OVER (PARTITION BY user_id ORDER BY month) AS prev_month\n  FROM monthly_customers\n),\n\nmonthly_counts AS (\n  SELECT \n    month,\n    -- Repeat customers: had purchases in this month and previous month\n    COUNT(DISTINCT user_id) FILTER (\n      WHERE prev_month = month - INTERVAL '1 month'\n    ) AS repeat_customers,\n    -- All customers who purchased this month\n    COUNT(DISTINCT user_id) AS total_customers\n  FROM consecutive_months\n  GROUP BY month\n)\n\nSELECT \n  TO_CHAR(month, 'YYYY-MM') AS month,\n  repeat_customers,\n  total_customers,\n  ROUND(repeat_customers * 100.0 / NULLIF(total_customers, 0), 2) AS repeat_purchase_rate_pct\nFROM monthly_counts\nWHERE month >= '2025-02-01'  -- Skip first month which can't have previous month in 2025\nORDER BY month;",
+  "tablesUsed": [
+    "orders",
+    "users",
+    "order_items"
+  ]
+}

@@ -1,1 +1,0 @@
-Bob: Investigating production memory leak on worker nodes. Discovered high GC pause times during image thumbnail generation. Patch under testing.

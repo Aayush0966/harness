@@ -1,0 +1,7 @@
+{
+  "churnRisk": false,
+  "primaryEmotion": "Joy",
+  "recommendedAction": "Acknowledge positive feedback and close ticket",
+  "sentimentScore": 0.95,
+  "urgencyScore": 0.02
+}

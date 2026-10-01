@@ -111,8 +111,9 @@
         document.getElementById('folder').textContent = parentDir.name;
         steps = (await createFolders(parentDir)).taskList;
         mountView();
-        const initialFolder = await readFolder(parentDir);
-        orchestrate({ folder: Composite.consume(initialFolder) });
+        const initialFolder = Composite.consume(await readFolder(parentDir));
+        Composite.register(initialFolder);
+        orchestrate({ folder: initialFolder });
         document.getElementById('runBtn').disabled = false;
         document.getElementById('prompt').disabled = false;
         document.getElementById('promptBtn').disabled = false;
@@ -124,10 +125,10 @@
     async function main() {
       if (!document.getElementById('key').value) return;
       document.getElementById('runBtn').disabled = true;
+      debugger
       try {
         const currentFolder = history[history.length - 1];
-        const outputs = await runEngineOnJson(currentFolder, steps);
-        const newFolderState = applyOutputs(currentFolder, outputs);
+        const newFolderState = await runEngineOnJson(currentFolder, steps);
         await writeFolder(parentDir, newFolderState);
         orchestrate({ folder: newFolderState }); // components stay mounted; state flows in
       } catch (err) {
@@ -148,9 +149,9 @@
     const currentFolder = history[history.length - 1]; // Get latest state
     
     // Fallback: If no files are specified in the URL, default to the very first file in the folder
-    const file = currentFolder.children.find(c => c.kind === 'file' && (names.length === 0 || names.includes(c.name)));
+    const file = currentFolder.children.find(c => c.kind === 'file' && (names.length === 0 || names.includes(c.filename)));
     
-    this.textContent = file ? file.content : 'No files found in this folder';
+    this.textContent = file ? file.data : 'No files found in this folder';
   }
 }`;
 
@@ -160,7 +161,7 @@
             'You write native Web Component view classes for a folder-based UI. ' +
             'A view is a class with update(history, transducers, uixComponents), called whenever state changes. ' +
             "Read the current file selection yourself via getParam('files') (comma-separated names) — never expect selection as an argument. " +
-            'Views must use file.content, not just file.name — a view that only lists names is wrong. ' +
+            'Views must use file.data, not just file.filename — a view that only lists names is wrong. ' +
             'CRITICAL RULES: ' +
             '1. Do NOT call customElements.define in the source; return only the class definition. ' +
             '2. The "name" in your JSON MUST be lowercase and contain a hyphen (e.g., "my-custom-view"). ' +
@@ -176,9 +177,9 @@
           }) + '\n\nReply: { "view": "", "selectedFiles": [...], "newView": null | { "name": "", "source": "" } }'
         },
       ];
-      
+
       try {
-        const res = await llm('deepseek/deepseek-chat', { messages, response_format: { type: 'json_object' } });
+        const res = await llm({ model: 'deepseek/deepseek-chat', messages, response_format: { type: 'json_object' } });
         const { view, selectedFiles = [], newView } = JSON.parse(res.choices[0].message.content);
 
         if (newView && !customElements.get(newView.name)) {

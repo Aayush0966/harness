@@ -1,0 +1,9 @@
+{
+  "hasPII": true,
+  "piiTypesFound": [
+    "email",
+    "phone_number",
+    "credit_card"
+  ],
+  "sanitizedText": "Customer: Hi, I'm calling about order #9021. My email is [EMAIL] and mobile is [PHONE].\nAgent: Thanks Robert! Can you confirm the last 4 digits of the card on file?\nCustomer: Sure, the full number is [CREDIT_CARD], exp [REDACTED_DATE].\nAgent: Got it, I have initiated the refund to that account."
+}

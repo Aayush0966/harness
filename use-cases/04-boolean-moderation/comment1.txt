@@ -1,1 +1,0 @@
-Thank you so much for this tutorial, it completely fixed my IndexedDB synchronization issue!

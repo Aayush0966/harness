@@ -1,0 +1,19 @@
+{
+  "modernizedCode": "import { readFile } from 'node:fs/promises';\nimport { resolve } from 'node:path';\n\ntype ReadConfigResult = { [key: string]: unknown };\ntype ReadConfigError = Error;\n\nexport async function readConfig(\n  filepath: string\n): Promise<ReadConfigResult> {\n  try {\n    const data = await readFile(resolve(filepath), { encoding: 'utf8' });\n    return JSON.parse(data) as ReadConfigResult;\n  } catch (error) {\n    throw new Error(\n      error instanceof Error && error.message.includes('ENOENT')\n        ? `Failed to read config: ${error.message}`\n        : `Invalid JSON in config: ${error instanceof Error ? error.message : String(error)}`\n    );\n  }\n}",
+  "refactorNotes": [
+    "Replaced CommonJS `require()` with ES module imports",
+    "Used `node:` protocol for core module imports (Node.js 14+)",
+    "Replaced callback pattern with async/await",
+    "Added comprehensive TypeScript type annotations",
+    "Type-safe error handling with proper Error type checking",
+    "Explicit return type annotations on function",
+    "Used `fs/promises` API instead of callback-based fs",
+    "Used `resolve` directly from path import instead of namespace",
+    "Simplified export syntax (named export instead of module.exports)",
+    "Improved error messages with more specific error detection",
+    "Added type assertion for JSON.parse result",
+    "Used modern `encoding` option syntax in readFile",
+    "Added proper handling for unknown error types in catch block"
+  ],
+  "runtimeTarget": "Node.js 14+ / ES2020"
+}
