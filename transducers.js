@@ -34,17 +34,20 @@ const PerFolderOps = {
 
   inputFiles: (arg = 0) => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, files) => {
     const idx = parseInt(arg);
+    const harvested = Object.fromEntries(Object.entries(item).filter(([k]) => k.startsWith('_')));
     const raw = outputs_.length > idx
-      ? (await outputs_[idx]).outputs.map(data => ({ data, query: item.query, llmOptions: item.llmOptions }))
+      ? (await outputs_[idx]).outputs.map(data => ({ data, llmOptions: item.llmOptions, ...harvested }))
       : (item.folder.children || [])
-          .filter(c => c.kind === 'file' && typeof c.data === 'string')
-          .map(f => ({ filename: f.filename, data: f.data, query: item.query, llmOptions: item.llmOptions }));
+        .filter(c => c.kind === 'file' && typeof c.data === 'string')
+        .map(f => ({ filename: f.filename, data: f.data, llmOptions: item.llmOptions, ...harvested }));
     const newFiles = raw.map(f => Composite(f, true));
     return innerCb(outputs_, Composite.set(item).files(newFiles), i, files);
   },
 
   Sample: arg => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, files) => {
-    const cfg = typeof arg === 'object' ? arg : { count: parseInt(arg) };
+    const cfg = typeof arg === 'object' ? arg
+      : arg != null ? { count: parseInt(arg) }
+        : (item._sample ?? {});
     const all = item.files ?? [];
     const n = cfg.ratio != null ? Math.max(1, Math.round(all.length * cfg.ratio)) : (cfg.count ?? all.length);
     const shuffled = all.slice().sort(() => Math.random() - 0.5);
@@ -94,16 +97,15 @@ const PerFileOps = {
   },
 
   FillQuery: arg => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, files) => {
-    const q = item.query;
-    const body = typeof item.data === 'string' ? item.data : JSON.stringify(item.data, null, 2);
-    const query = (q.prefix ? q.prefix + '\n\n' : '') + (q.text || '') + '\n\n' + body + (q.postface ? '\n\n' + q.postface : '');
-    const llmOptions = { ...item.llmOptions, messages: [{ role: 'user', content: query }] };
+    const query = typeof item.query === 'string' ? item.query : groupCtx.template({ ...item }).trim();
     item = Composite.set(item).query(query);
-    item = Composite.set(item).llmOptions(llmOptions);
+    item = Composite.set(item).llmOptions.messages([{ role: 'user', content: query }]);
     return innerCb(outputs_, item, i, files);
   },
 
-  Json: schema => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, files) => {
+
+  Json: arg => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, files) => {
+    const schema = arg ?? item._schema;
     const llmOptions = { ...item.llmOptions, response_format: { type: "json_schema", json_schema: schema } };
     item = Composite.set(item).llmOptions(llmOptions);
     const res = await innerCb(outputs_, item, i, files);
@@ -111,9 +113,11 @@ const PerFileOps = {
   },
 
   Boolean: config => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, files) => {
-    const schema = { name: "boolean_result", strict: true, schema: {
-      type: "object", properties: { value: { type: "boolean" } }, required: ["value"], additionalProperties: false
-    }};
+    const schema = {
+      name: "boolean_result", strict: true, schema: {
+        type: "object", properties: { value: { type: "boolean" } }, required: ["value"], additionalProperties: false
+      }
+    };
     const llmOptions = { ...item.llmOptions, response_format: { type: "json_schema", json_schema: schema } };
     item = Composite.set(item).llmOptions(llmOptions);
     const res = await innerCb(outputs_, item, i, files);
@@ -121,20 +125,25 @@ const PerFileOps = {
   },
 
   Tagging: config => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, files) => {
-    const schema = { name: "tagging_result", strict: true, schema: {
-      type: "object", properties: { tags: { type: "array", items: { type: "string" } } }, required: ["tags"], additionalProperties: false
-    }};
+    const schema = {
+      name: "tagging_result", strict: true, schema: {
+        type: "object", properties: { tags: { type: "array", items: { type: "string" } } }, required: ["tags"], additionalProperties: false
+      }
+    };
     const llmOptions = { ...item.llmOptions, response_format: { type: "json_schema", json_schema: schema } };
     item = Composite.set(item).llmOptions(llmOptions);
     const res = await innerCb(outputs_, item, i, files);
     const tags = JSON.parse(res.data).tags;
-    return Composite.set(res).data(config?.allowedTags ? tags.filter(t => config.allowedTags.includes(t)) : tags);
+    const allowedTags = config?.allowedTags ?? item._allowedTags;
+    return Composite.set(res).data(allowedTags ? tags.filter(t => allowedTags.includes(t)) : tags);
   },
 
   Scoring: config => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, files) => {
-    const schema = { name: "scoring_result", strict: true, schema: {
-      type: "object", properties: { score: { type: "number" } }, required: ["score"], additionalProperties: false
-    }};
+    const schema = {
+      name: "scoring_result", strict: true, schema: {
+        type: "object", properties: { score: { type: "number" } }, required: ["score"], additionalProperties: false
+      }
+    };
     const llmOptions = { ...item.llmOptions, response_format: { type: "json_schema", json_schema: schema } };
     item = Composite.set(item).llmOptions(llmOptions);
     const res = await innerCb(outputs_, item, i, files);
@@ -144,9 +153,11 @@ const PerFileOps = {
   },
 
   Spread: config => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, files) => {
-    const schema = { name: "spread_result", strict: true, schema: {
-      type: "object", properties: { items: { type: "array", items: { type: "string" } } }, required: ["items"], additionalProperties: false
-    }};
+    const schema = {
+      name: "spread_result", strict: true, schema: {
+        type: "object", properties: { items: { type: "array", items: { type: "string" } } }, required: ["items"], additionalProperties: false
+      }
+    };
     const llmOptions = { ...item.llmOptions, response_format: { type: "json_schema", json_schema: schema } };
     item = Composite.set(item).llmOptions(llmOptions);
     const res = await innerCb(outputs_, item, i, files);
@@ -154,7 +165,9 @@ const PerFileOps = {
   },
 
   Budget: strArg => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, files) => {
-    rootCtx[budgetMax] ??= Number(strArg);
+    const limit = Number(strArg ?? item._budget);
+    if (!Number.isFinite(limit)) throw new Error('Budget: no limit configured');
+    rootCtx[budgetMax] ??= limit;
     rootCtx[budgetSpent] ??= 0;
     if (rootCtx[budgetSpent] >= rootCtx[budgetMax])
       throw new Error(`Dollar Budget exceeded: $${rootCtx[budgetSpent].toFixed(4)} >= $${rootCtx[budgetMax]}`);
@@ -170,7 +183,9 @@ const PerFileOps = {
   },
 
   TokenMax: strArg => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, files) => {
-    rootCtx[tokenMaxLimit] ??= Number(strArg);
+    const limit = Number(strArg ?? item._tokenMax);
+    if (!Number.isFinite(limit)) throw new Error('TokenMax: no limit configured');
+    rootCtx[tokenMaxLimit] ??= limit;
     rootCtx[tokenSpent] ??= 0;
     if (rootCtx[tokenSpent] >= rootCtx[tokenMaxLimit])
       throw new Error(`Token limit exceeded: ${rootCtx[tokenSpent]} >= ${rootCtx[tokenMaxLimit]}`);
@@ -185,23 +200,25 @@ const PerFileOps = {
   },
 
   Reduce: config => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, files) => {
-    const acc = outputs_.length ? (await outputs_[0]).data : (config.seed ?? null);
+    const seed = config?.seed ?? item._seed ?? null;
+    const acc = outputs_.length ? (await outputs_[0]).data : seed;
     const data = JSON.stringify({ accumulator: acc, item: item.data }, null, 2); // item.data used as-is — works for strings, numbers, objects, arrays
     return innerCb(outputs_, Composite.set(item).data(data), i, files);
   },
 
   MultiSearch: config => (innerCb, rootCtx, groupCtx) => async (outputs_, item, i, files) => {
+    const cfg = config ?? item._multiSearch;
     const candidates = await Promise.all(
-      config.searchModels.map(model =>
+      cfg.searchModels.map(model =>
         innerCb(outputs_, Composite.set(item).llmOptions({ ...item.llmOptions, model }), i, files)
       )
     );
     const judgeContent = JSON.stringify(candidates.map((r, ci) => ({
-      candidate: ci, model: config.searchModels[ci], data: r.data
+      candidate: ci, model: cfg.searchModels[ci], data: r.data
     })), null, 2);
     let judgeItem = Composite.set(item).data(judgeContent);
-    judgeItem = Composite.set(judgeItem).query(config.judgeQuery);
-    judgeItem = Composite.set(judgeItem).llmOptions({ ...item.llmOptions, model: config.judgeModel || item.llmOptions.model });
+    judgeItem = Composite.set(judgeItem).query(cfg.judgeQuery);
+    judgeItem = Composite.set(judgeItem).llmOptions({ ...item.llmOptions, model: cfg.judgeModel || item.llmOptions.model });
     const verdict = await innerCb(outputs_, judgeItem, i, files);
     try {
       const winnerIdx = (typeof verdict.data === 'object' && typeof verdict.data.winner === 'number')

@@ -1,0 +1,26 @@
+${void ($.llmOptions = { model: "deepseek/deepseek-chat" })}
+${void ($._perFolderOps = [{ name: "inputFiles", arg: 0 }, "Merge"])}
+${void ($._perFileOps = ["FillQuery", "Json"])}
+${void ($._schema = {
+  name: "cross_service_correlation",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: {
+      rootCauseService: { type: "string" },
+      affectedTraceIds: { type: "array", items: { type: "string" } },
+      failureChain: { type: "array", items: { type: "string" } },
+      remediation: { type: "string" }
+    },
+    required: ["rootCauseService", "affectedTraceIds", "failureChain", "remediation"],
+    additionalProperties: false
+  }
+})}
+
+You are a Distributed Systems Observability and Root Cause Correlation Engine.
+
+Analyze the following consolidated batch of microservice event logs (auth, billing, notifications). Correlate the cross-service request traces, identify the root failure cascading across services, and output a structured postmortem diagnosis:
+
+${$.data}
+
+Map out the exact sequence of cascading failures and highlight affected trace IDs.

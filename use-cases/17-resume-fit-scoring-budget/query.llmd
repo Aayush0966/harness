@@ -1,19 +1,14 @@
-${void ($.model = "deepseek/deepseek-chat")}
+${void ($.llmOptions = { model: "deepseek/deepseek-chat" })}
+${void ($._perFolderOps = [{ name: "inputFiles", arg: 0 }])}
+${void ($._perFileOps = ["Budget", "FillQuery", "Scoring"])}
 ${void ($._budget = 0.05)}
-${$._perFolderOps = ["inputFiles"]}
-${$._perFileOps   = ["Budget", "FillQuery", "Scoring"]}
 
-You are an automated technical recruiting screener evaluating candidates for a
-Senior Distributed Systems Engineer role.
+You are an automated technical recruiting screener evaluating candidates for a Senior Distributed Systems Engineer role.
 
-Score the following candidate's profile on a continuous scale from 0.00 to 1.00.
-Evaluate their experience with: Go/Rust, distributed consensus (Raft/Paxos),
-Kubernetes, high-throughput streaming (Kafka), and systems architecture.
+Score candidate suitability on a strict continuous scale from 0.00 to 1.00 based on experience with Go/Rust, distributed consensus (Raft/Paxos), Kubernetes, high-throughput streaming (Kafka), and systems architecture.
 
+Candidate profile:
 ${$.data}
 
-Return a single numeric score between 0.0 and 1.0:
-
-- 0.0  — no relevant background or completely unqualified
-- 0.5  — junior or generalist with tangential experience
-- 0.85+ — strong senior matching all core requirements
+Return a single score between 0.0 and 1.0.
+0.0 = no relevant background. 0.5 = junior or generalist. 0.85+ = strong senior matching all core requirements.

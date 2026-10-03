@@ -1,7 +1,7 @@
-${void ($.model = "deepseek/deepseek-chat")}
-${$._perFolderOps = ["inputFiles"]}
-${$._perFileOps   = ["FillQuery", "Tagging"]}
-${$._allowedTags  = ["billing", "payment", "bug", "performance", "database", "ui", "accessibility", "feature_request", "security"]}
+${void ($.llmOptions = { model: "deepseek/deepseek-chat" })}
+${void ($._perFolderOps = [{ name: "inputFiles", arg: 0 }])}
+${void ($._perFileOps = ["FillQuery", "Tagging"])}
+${void ($._allowedTags = ["billing", "payment", "bug", "performance", "database", "ui", "accessibility", "feature_request", "security"])}
 
 You are an automated support ticket triage and taxonomy classifier.
 
@@ -9,4 +9,4 @@ Analyze the following support ticket and assign all applicable category tags fro
 
 ${$.data}
 
-Select ONLY relevant tags from the allowed list: ${JSON.stringify($._allowedTags)}.
+Select ONLY relevant tags from this list: ${JSON.stringify($._allowedTags)}.

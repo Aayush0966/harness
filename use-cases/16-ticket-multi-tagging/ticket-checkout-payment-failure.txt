@@ -1,5 +1,4 @@
 [
-  "billing",
   "payment",
   "bug"
 ]

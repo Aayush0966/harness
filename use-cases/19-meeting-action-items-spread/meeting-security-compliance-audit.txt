@@ -1,6 +1,6 @@
 [
-  "Tom: Deploy MDM remediation profile to enforce encryption on 12 non-compliant workstations by this Friday",
-  "Lisa: Integrate Okta SCIM directory with GitHub Enterprise and deploy automated access revocation via PR by next Tuesday",
-  "Tom: Script rotation of AWS IAM access keys >90 days old and update KMS secrets manager by end of next week",
-  "Elena: Assemble policy evidence binder and upload vendor questionnaires to Vanta portal by next Friday"
+  "Assignee: Tom - Deploy MDM remediation profile to enforce full disk encryption on 12 non-compliant developer workstations. Deadline: This Friday.",
+  "Assignee: Lisa - Integrate Okta SCIM directory with GitHub Enterprise and deploy automated access revocation for employee offboarding. Deadline: Next Tuesday.",
+  "Assignee: Tom - Script rotation of all AWS IAM access keys older than 90 days and update KMS secrets manager. Deadline: End of next week.",
+  "Assignee: Elena - Assemble policy evidence binder and upload completed vendor security questionnaires to Vanta compliance portal. Deadline: Next Friday."
 ]

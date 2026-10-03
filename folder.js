@@ -1,6 +1,6 @@
 
 const TEXT_EXTS = new Set([
-  'txt', 'md', 'markdown', 'js', 'mjs', 'ts', 'jsx', 'tsx',
+  'txt', 'md', 'markdown', 'llmd', 'js', 'mjs', 'ts', 'jsx', 'tsx',
   'json', 'jsonl', 'yaml', 'yml', 'toml', 'xml', 'html', 'htm',
   'css', 'scss', 'less', 'svg', 'csv', 'sh', 'py', 'rb', 'go',
   'rs', 'c', 'cpp', 'h', 'java', 'kt', 'swift', 'sql',
@@ -23,7 +23,7 @@ const readFolder = async (dirHandle, path = '') => {
   for await (const handle of dirHandle.values()) {
     if (handle.kind === 'file') {
       const file = await handle.getFile();
-      const kind = handle.name === 'config.json' ? 'config' : 'file';
+      const kind = handle.name === 'query.llmd' ? 'config' : 'file';
       entries.children.push({ kind, filename: handle.name, ...await readFile(file) });
     } else {
       entries.children.push({ kind: 'directory', ...await readFolder(handle, path ? `${path}/${handle.name}` : handle.name) });
@@ -42,10 +42,13 @@ async function createFolders(rawInputFolder) {
 
   for (const entry of entries) {
     try {
-      const op = JSON.parse(await (await (await entry.getFileHandle('config.json')).getFile()).text());
-      taskList.push({ folderName: entry.name, ...op });
+      const body = await (await (await entry.getFileHandle('query.llmd')).getFile()).text();
+      const template = compileLlmd(body);
+      const scratch = {};
+      template(scratch);
+      taskList.push({ folderName: entry.name, template, ...scratch });
     } catch (e) {
-      // skip folders without a valid operation.json
+      // skip folders without a valid query.llmd
     }
   }
   return { taskList };

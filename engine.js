@@ -7,6 +7,15 @@ const llm = (llmOptions) => fetch('https://openrouter.ai/api/v1/chat/completions
   if (!r.ok) throw new Error(`API ${r.status}: ${(await r.json()).error?.message || r.statusText}`);
   return r.json();
 });
+const toOps = ops => (ops ?? []).map(op => typeof op === 'string' ? { name: op } : op);
+
+const llmd = (strings, ...values) =>
+  strings.reduce((acc, str, i) =>
+    acc + (['string', 'number', 'boolean', 'bigint'].includes(typeof values[i - 1]) ? values[i - 1] : '') + str);
+
+const compileLlmd = body =>
+  new Function('llmd', '$', 'return llmd`' + body.replace(/[`\\]/g, '\\$&') + '`').bind(null, llmd);
+
 
 const Transducer = (name, arg, dict) => {
   if (name in dict)
@@ -19,15 +28,14 @@ const histoReduce = reducer => (_, { files }) =>
 
 function compileFolder(taskList, innerMostCall, rootCtx = {}, groupCtx = {}) {
   groupCtx.id ??= taskList.folderName;
-  const { perFileOps, perFolderOps } = taskList;
+  groupCtx.template ??= taskList.template;
 
-  const perFileTransducers = perFileOps.map(({ name, arg }) => Transducer(name, arg, PerFileOps));
+  const perFileTransducers = toOps(taskList._perFileOps).map(({ name, arg }) => Transducer(name, arg, PerFileOps));
   const perFileReducer = perFileTransducers.reduceRight((reducer, transducer) => transducer(reducer, rootCtx, groupCtx), innerMostCall);
   const filesHistoReduce = histoReduce(perFileReducer);
 
   const mergeStep = PerFolderOps._merge(null);
-  const perFolderTransducers = perFolderOps.map(({ name, arg }) => Transducer(name, arg, PerFolderOps));
-  const perFolderReducer = perFolderTransducers.reduceRight(
+  const perFolderTransducers = toOps(taskList._perFolderOps).map(({ name, arg }) => Transducer(name, arg, PerFolderOps)); const perFolderReducer = perFolderTransducers.reduceRight(
     (reducer, transducer) => transducer(reducer, rootCtx, groupCtx),
     mergeStep(filesHistoReduce, rootCtx, groupCtx)
   );
@@ -49,15 +57,14 @@ function compileFolder(taskList, innerMostCall, rootCtx = {}, groupCtx = {}) {
 
 async function runEngineOnJson(folder, taskList, rootCtx = {}) {
   if (!taskList.length) return folder;
-  let currentFolder = folder;
   for (let i = 0; i < taskList.length; i++) {
-    const stepFolder = currentFolder.children?.find(c => c.kind === 'directory' && c.folderName === taskList[i].folderName) ?? currentFolder;
+    const stepFolder = folder.children?.find(c => c.kind === 'directory' && c.folderName === taskList[i].folderName) ?? folder;
     const folderReducer = compileFolder(taskList[i], PerFileOps._root, rootCtx);
     const updatedStepFolder = await folderReducer([], Composite({ ...taskList[i], folder: stepFolder }, true), i, taskList);
-    const updatedChildren = currentFolder.children
-      ? currentFolder.children.map(c => c.kind === 'directory' && c.folderName === taskList[i].folderName ? updatedStepFolder : c)
-      : currentFolder.children;
-    currentFolder = Composite.set(currentFolder).children(updatedChildren ?? currentFolder.children);
+    const updatedChildren = folder.children
+      ? folder.children.map(c => c.kind === 'directory' && c.folderName === taskList[i].folderName ? updatedStepFolder : c)
+      : folder.children;
+    folder = Composite.set(folder).children(updatedChildren ?? folder.children);
   }
-  return currentFolder;
+  return folder;
 }

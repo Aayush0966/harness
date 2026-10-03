@@ -1,17 +1,7 @@
 [
-  "Action: Complete automated load testing suite for checkout service with 10,000 rps stress test",
-  "Assignee: Jake",
-  "Deadline: Friday afternoon",
-  "Action: Finalize and push Cloudflare DDoS rate-limiting configs to staging",
-  "Assignee: Dave",
-  "Deadline: Wednesday EOD",
-  "Action: Review and sign off on product launch email copy",
-  "Assignee: Sarah",
-  "Deadline: Thursday noon",
-  "Action: Update public API changelog and publish release documentation",
-  "Assignee: Sarah",
-  "Deadline: Monday",
-  "Action: Schedule on-call pager rotation for launch day using Opsgenie",
-  "Assignee: Dave",
-  "Deadline: Thursday"
+  "Jake: Complete automated load testing suite for checkout service with 10,000 rps stress test by Friday afternoon",
+  "Dave: Finalize and push Cloudflare DDoS rate-limiting configs to staging by Wednesday EOD",
+  "Sarah: Review and sign off on product launch email copy by Thursday noon",
+  "Sarah: Update and publish public API changelog and release documentation by Monday morning",
+  "Dave: Schedule on-call pager rotation for launch day in Opsgenie by Thursday"
 ]

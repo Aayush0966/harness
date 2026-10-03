@@ -22,11 +22,17 @@ function hashString(str, hash = 0x811c9dc5) {
 }
 
 let i = 0;
-const StaticSymbols = new Map(), DynamicSymbols = new WeakMap();
+const StaticSymbols = new Map(), DynamicSymbols = new WeakMap(), DynamicFunctions = new WeakMap();
 function hashSymbol(s, hash = 0x811c9dc5) {
   let v = StaticSymbols.get(s) ?? DynamicSymbols.get(s);
   if (!v)
     Symbol.keyFor(s) !== undefined ? StaticSymbols.set(s, v = ++i) : DynamicSymbols.set(s, v = ++i);
+  return Math.imul(hash ^ v, 0x01000193);
+}
+function hashFunction(fn, hash = 0x811c9dc5) {
+  let v = DynamicFunctions.get(fn);
+  if (!v)
+    DynamicFunctions.set(fn, v = ++i);
   return Math.imul(hash ^ v, 0x01000193);
 }
 
@@ -54,6 +60,7 @@ function hashPrimitive(v, hash = 0x811c9dc5) {
   if (t === 'bigint') return hashString(v.toString(), hash);
   if (t === 'number') return hashNumber(v, hash);
   if (t === 'symbol') return hashSymbol(v, hash);
+  if (t === 'function') return hashFunction(v, hash);
 }
 function hashPropertyKey(key, hash = 0x811c9dc5) {
   hash = Math.imul(hash ^ HASHTAGS.property, 0x01000193);
@@ -173,7 +180,8 @@ Composite.is = function is(v) {
   return v == null || typeof v === 'string' ||
     typeof v === 'number' || typeof v === 'boolean' ||
     typeof v === 'symbol' ||
-    typeof v === 'bigint' || HASHCACHE.getHash(v) !== undefined;
+    typeof v === 'bigint' ||
+    typeof v === 'function' || HASHCACHE.getHash(v) !== undefined;
 }
 
 function getImpl(obj, path, end = path.length) {

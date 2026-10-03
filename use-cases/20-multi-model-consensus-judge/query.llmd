@@ -1,0 +1,30 @@
+${void ($.llmOptions = { model: "deepseek/deepseek-chat", temperature: 0 })}
+${void ($._perFolderOps = [{ name: "inputFiles", arg: 0 }])}
+${void ($._perFileOps = ["MultiSearch", "FillQuery", "Json"])}
+${void ($._multiSearch = {
+  searchModels: ["deepseek/deepseek-chat", "google/gemini-2.5-flash"],
+  judgeModel: "deepseek/deepseek-chat",
+  judgeQuery: 'You are the Chief Technology Officer acting as a definitive evaluation judge.\n\nReview the candidate designs below, submitted by independent models. Choose the winning design — the one that is more reliable, cost-effective, and operationally sound.\n\nSet "winner" to the index (0 or 1) of the best candidate. Include your justification in "analysis" and summarize the chosen architecture in "solution".\n\nCandidate designs:'
+})}
+${void ($._schema = {
+  name: "architecture_evaluation",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: {
+      winner: { type: "integer" },
+      analysis: { type: "string" },
+      solution: { type: "string" }
+    },
+    required: ["winner", "analysis", "solution"],
+    additionalProperties: false
+  }
+})}
+
+You are a Principal Cloud Architect proposing an infrastructure design.
+
+Design a high-availability solution for the following architectural challenge:
+
+${$.data}
+
+Provide an in-depth analysis and concrete solution. Set "winner" to 0 in your output.
