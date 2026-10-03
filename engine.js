@@ -1,7 +1,7 @@
 
 const llm = (llmOptions) => fetch('https://openrouter.ai/api/v1/chat/completions', {
   method: 'POST',
-  headers: { Authorization: 'Bearer ' + document.getElementById('key').value, 'Content-Type': 'application/json' },
+  headers: { Authorization: 'Bearer ' + localStorage.getItem('iverdream_key'), 'Content-Type': 'application/json' },
   body: JSON.stringify(llmOptions)
 }).then(async r => {
   if (!r.ok) throw new Error(`API ${r.status}: ${(await r.json()).error?.message || r.statusText}`);
@@ -51,11 +51,11 @@ async function runEngineOnJson(folder, taskList, rootCtx = {}) {
   if (!taskList.length) return folder;
   let currentFolder = folder;
   for (let i = 0; i < taskList.length; i++) {
-    const stepFolder = currentFolder.children?.find(c => c.kind === 'directory' && c.name === taskList[i].folderName) ?? currentFolder;
+    const stepFolder = currentFolder.children?.find(c => c.kind === 'directory' && c.folderName === taskList[i].folderName) ?? currentFolder;
     const folderReducer = compileFolder(taskList[i], PerFileOps._root, rootCtx);
     const updatedStepFolder = await folderReducer([], { ...taskList[i], folder: stepFolder }, i, taskList);
     const updatedChildren = currentFolder.children
-      ? currentFolder.children.map(c => c.kind === 'directory' && c.name === taskList[i].folderName ? updatedStepFolder : c)
+      ? currentFolder.children.map(c => c.kind === 'directory' && c.folderName === taskList[i].folderName ? updatedStepFolder : c)
       : currentFolder.children;
     currentFolder = Composite.set(currentFolder).children(updatedChildren ?? currentFolder.children);
   }

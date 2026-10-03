@@ -6,17 +6,12 @@
   <title>IverDream Harness</title>
 </head>
 
-<body>
-  <input id="key" type="password" placeholder="OpenRouter API Key">
-  <button onclick="pick()">Pick Folder</button>
-  <span id="folder"></span>
-  <button id="runBtn" disabled onclick="main()">Run</button>
-
-  <!-- Step 8: smart prompt -->
-  <input id="prompt" placeholder="Describe your goal…" style="width:40em" disabled>
-  <button id="promptBtn" disabled onclick="smartPrompt()">Go</button>
-
-  <div id="viewport"></div>
+<body style="margin:0; display:flex; flex-direction:column; height:100vh">
+  <top-bar-view id="topBar" style="position:sticky; top:0; z-index:100; flex-shrink:0"></top-bar-view>
+  <div id="main" style="display:flex; flex:1; overflow:hidden">
+    <side-bar-view id="sideBar"></side-bar-view>
+    <div id="viewport" style="flex:1; overflow:auto; padding:8px"></div>
+  </div>
 
   <script src="composite.js"></script>
   <script src="folder.js"></script>
@@ -24,12 +19,10 @@
   <script src="engine.js"></script>
   <script src="libview.js"></script>
   <script>
-    document.getElementById('key').value = localStorage.getItem('iverdream_key') || '';
-    document.getElementById('key').oninput = function () { localStorage.setItem('iverdream_key', this.value); };
-
-    // Step 4: three separate state pieces — never merged into one blob.
     let steps = [], parentDir = null;
     let history = [], transducers = {}, uixComponents = {};
+    const topBar = document.getElementById('topBar');
+    const sideBar = document.getElementById('sideBar');
     const activeComponents = new Set();
 
     const getParam = key => new URLSearchParams(location.search).get(key);
@@ -39,17 +32,13 @@
       window.history.replaceState(null, '', `?${p}`);
     };
 
-    // Step 4: the single place any state change originates and propagates outward.
-    // Put a breakpoint here to trace any race condition or sync issue.
     function orchestrate(changes) {
       if (changes.folder) history = [...history, changes.folder];
       if (changes.transducers) transducers = { ...transducers, ...changes.transducers };
       if (changes.uixComponents) uixComponents = { ...uixComponents, ...changes.uixComponents };
-      for (const component of activeComponents) component.update(history, transducers, uixComponents);
+      for (const component of [topBar, sideBar, ...activeComponents]) component.update(history, transducers, uixComponents);
     }
 
-    // DOM-only: mount one element per view name (comma-separated in ?view=a,b,c).
-    // State arrives via orchestrate() — nothing is read from the DOM here.
     function mountView() {
       const viewport = document.getElementById('viewport');
       viewport.innerHTML = '';
@@ -66,11 +55,20 @@
     viewport.addEventListener('new-folder', e => orchestrate({ folder: e.detail }));
     orchestrate({
       transducers: { PerFileOps, PerFolderOps },
-      uixComponents: { 'test-view': TestView, 'default-view': DefaultView },
+      uixComponents: { 'default-view': DefaultView, 'top-bar-view': TopBarView, 'side-bar-view': SideBarView },
     });
 
-    // Step 7: revive any previously saved custom components from localStorage.
-    // eval() is safe here because step-5 purity guarantees fn.toString() fully captures behaviour.
+    document.addEventListener('pick-folder', () => pick());
+    document.addEventListener('run-engine', e => {
+      if (e.detail?.key) localStorage.setItem('iverdream_key', e.detail.key);
+      main(e.detail?.key);
+    });
+    document.addEventListener('smart-prompt', e => {
+      if (e.detail?.key) localStorage.setItem('iverdream_key', e.detail.key);
+      smartPrompt(e.detail?.goal);
+    });
+    document.addEventListener('step-changed', () => orchestrate({}));
+
     const loadCustom = () => {
       const saved = JSON.parse(localStorage.getItem('iverdream_custom') || '{}');
       const customTransducers = {}, customUIX = {};
@@ -86,15 +84,11 @@
       if (Object.keys(customUIX).length) orchestrate({ uixComponents: customUIX });
     };
 
-    // Step 7: persist any new-transducer / new-uix-component to localStorage before orchestrate() sees it.
-    // Capture phase (true) so the save runs first. detail shape: { name, value } — value.toString() is the source.
     const saveCustom = (key, name, value) => {
       const saved = JSON.parse(localStorage.getItem('iverdream_custom') || '{}');
       saved[key] = { ...(saved[key] || {}), [name]: value.toString() };
       localStorage.setItem('iverdream_custom', JSON.stringify(saved));
     };
-    // detail shape for both: { name, value } — confirmed by all dispatch sites.
-    // Capture phase (true) so saveCustom persists before orchestrate() propagates to components.
     viewport.addEventListener('new-transducer', e => {
       saveCustom('transducers', e.detail.name, e.detail.value);
       orchestrate({ transducers: { [e.detail.name]: e.detail.value } });
@@ -108,72 +102,70 @@
     async function pick() {
       try {
         parentDir = await showDirectoryPicker({ mode: 'readwrite' });
-        document.getElementById('folder').textContent = parentDir.name;
         steps = (await createFolders(parentDir)).taskList;
         mountView();
         const initialFolder = Composite.consume(await readFolder(parentDir));
         Composite.register(initialFolder);
         orchestrate({ folder: initialFolder });
-        document.getElementById('runBtn').disabled = false;
-        document.getElementById('prompt').disabled = false;
-        document.getElementById('promptBtn').disabled = false;
       } catch (e) {
         if (e.name !== 'AbortError') throw e;
       }
     }
 
-    async function main() {
-      if (!document.getElementById('key').value) return;
-      document.getElementById('runBtn').disabled = true;
-      debugger
+    async function main(key) {
+      const apiKey = key || localStorage.getItem('iverdream_key');
+      if (!apiKey) return;
       try {
         const currentFolder = history[history.length - 1];
         const newFolderState = await runEngineOnJson(currentFolder, steps);
         await writeFolder(parentDir, newFolderState);
-        orchestrate({ folder: newFolderState }); // components stay mounted; state flows in
+        orchestrate({ folder: newFolderState });
       } catch (err) {
-        console.error("Error during processing:", err);
+        console.error('Error during processing:', err);
       }
-      document.getElementById('runBtn').disabled = false;
     }
 
-    // Step 8: smart prompt — reuses llm() from engine.js, no new fetch code.
-    // LLM receives current state and available views; returns { view, selectedFiles }.
-    async function smartPrompt() {
-      const goal = document.getElementById('prompt').value.trim();
-      if (!goal || history.length === 0) return;
-
-      const referenceView = `class SingleFileView extends HTMLElement {
+    const smartPromptReferenceView = `class SingleFileView extends HTMLElement {
   update(history, transducers, uixComponents) {
     const names = (getParam('files') || '').split(',').filter(Boolean);
-    const currentFolder = history[history.length - 1]; // Get latest state
-    
-    // Fallback: If no files are specified in the URL, default to the very first file in the folder
-    const file = currentFolder.children.find(c => c.kind === 'file' && (names.length === 0 || names.includes(c.filename)));
-    
-    this.textContent = file ? file.data : 'No files found in this folder';
+    const rootFolder = history[history.length - 1];
+    const allFiles = (rootFolder.children || []).flatMap(c => 
+      c.kind === 'file' ? [c] : (c.children || []).filter(sub => sub.kind === 'file')
+    );
+    const file = allFiles.find(f => names.length === 0 || names.includes(f.filename));
+    if (!file) {
+      this.textContent = 'No files found.';
+      return;
+    }
+    this.textContent = typeof file.data === 'string' 
+      ? file.data 
+      : JSON.stringify(file.data, null, 2);
   }
 }`;
 
+    const smartPromptSystemMessage =
+      'You write native Web Component view classes for a folder-based UI. ' +
+      'A view is a class with update(history, transducers, uixComponents), called whenever state changes. ' +
+      "Read the current file selection yourself via getParam('files') (comma-separated names) — never expect selection as an argument. " +
+      'Views must use file.data, not just file.filename — a view that only lists names is wrong. ' +
+      'CRITICAL RULES: ' +
+      '1. Do NOT call customElements.define in the source; return only the class definition. ' +
+      '2. The "name" in your JSON MUST be lowercase and contain a hyphen (e.g., "my-custom-view"). ' +
+      '3. Your code MUST be 100% pure. Do not use external closures or global variables; everything must be self-contained. ' +
+      '4. STRICT REUSE: You MUST check availableViews first. If an existing view fits the goal, put its name in "view" and set "newView" to null. ' +
+      '5. ONLY write a "newView" if absolutely no existing view can handle the task. Reply with JSON only. ' +
+      '6. HIERARCHY: Files are nested inside step subdirectories. Flatten the tree to find files.';
+
+    async function smartPrompt(goal) {
+      if (!goal || history.length === 0) return;
+
       const messages = [
-        {
-          role: 'system', content:
-            'You write native Web Component view classes for a folder-based UI. ' +
-            'A view is a class with update(history, transducers, uixComponents), called whenever state changes. ' +
-            "Read the current file selection yourself via getParam('files') (comma-separated names) — never expect selection as an argument. " +
-            'Views must use file.data, not just file.filename — a view that only lists names is wrong. ' +
-            'CRITICAL RULES: ' +
-            '1. Do NOT call customElements.define in the source; return only the class definition. ' +
-            '2. The "name" in your JSON MUST be lowercase and contain a hyphen (e.g., "my-custom-view"). ' +
-            '3. Your code MUST be 100% pure. Do not use external closures or global variables; everything must be self-contained. ' +
-            '4. STRICT REUSE: You MUST check availableViews first. If an existing view fits the goal, put its name in "view" and set "newView" to null. ' +
-            '5. ONLY write a "newView" if absolutely no existing view can handle the task. Reply with JSON only.'
-        },
+        { role: 'system', content: smartPromptSystemMessage },
         {
           role: 'user', content: JSON.stringify({
             goal, currentView: getParam('view'), availableViews: Object.keys(uixComponents),
-            folderName: history[history.length - 1].name, folderChildren: history[history.length - 1].children?.map(c => ({ kind: c.kind, name: c.name })),
-            referenceView,
+            folderName: history[history.length - 1].folderName, folderChildren: history[history.length - 1].children?.map(c => ({ kind: c.kind, ...(c.kind === 'directory' ? { folderName: c.folderName } : { filename: c.filename }) })),
+            referenceView: smartPromptReferenceView,
           }) + '\n\nReply: { "view": "", "selectedFiles": [...], "newView": null | { "name": "", "source": "" } }'
         },
       ];

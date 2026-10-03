@@ -19,7 +19,7 @@ const readFile = async file => {
 };
 
 const readFolder = async (dirHandle, path = '') => {
-  const entries = { name: dirHandle.name, path, children: [] };
+  const entries = { folderName: dirHandle.name, path, children: [] };
   for await (const handle of dirHandle.values()) {
     if (handle.kind === 'file') {
       const file = await handle.getFile();
@@ -29,7 +29,7 @@ const readFolder = async (dirHandle, path = '') => {
       entries.children.push({ kind: 'directory', ...await readFolder(handle, path ? `${path}/${handle.name}` : handle.name) });
     }
   }
-  entries.children.sort((a, b) => (a.filename ?? a.name).localeCompare(b.filename ?? b.name));
+  entries.children.sort((a, b) => (a.filename ?? a.folderName).localeCompare(b.filename ?? b.folderName));
   return entries;
 };
 
@@ -54,7 +54,7 @@ async function createFolders(rawInputFolder) {
 async function writeFolder(dirHandle, folderObj) {
   for (const child of folderObj.children) {
     if (child.kind === 'directory') {
-      const subDir = await dirHandle.getDirectoryHandle(child.name, { create: true });
+      const subDir = await dirHandle.getDirectoryHandle(child.folderName, { create: true });
       await writeFolder(subDir, child);
     } else {
       const w = await (await dirHandle.getFileHandle(child.filename, { create: true })).createWritable();
