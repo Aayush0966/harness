@@ -1,0 +1,17 @@
+[
+  "Action: Complete automated load testing suite for checkout service with 10,000 rps stress test",
+  "Assignee: Jake",
+  "Deadline: Friday afternoon",
+  "Action: Finalize and push Cloudflare DDoS rate-limiting configs to staging",
+  "Assignee: Dave",
+  "Deadline: Wednesday EOD",
+  "Action: Review and sign off on product launch email copy",
+  "Assignee: Sarah",
+  "Deadline: Thursday noon",
+  "Action: Update public API changelog and publish release documentation",
+  "Assignee: Sarah",
+  "Deadline: Monday",
+  "Action: Schedule on-call pager rotation for launch day using Opsgenie",
+  "Assignee: Dave",
+  "Deadline: Thursday"
+]

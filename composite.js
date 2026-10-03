@@ -127,23 +127,15 @@ class WeakHashMap {
 const HASHCACHE = new WeakHashMap();
 /**
  * @param {*} obj plain data objects, arrays, primitives or symbols; accessors and proxies are unsupported. 
+ * @param {boolean} consume if true, the input objects will be mutated and frozen in place if possible. If false, new objects will be created and frozen.
+ *        Typically used as a wrapper around JSON object: Composite(JSON.parse(...), true).
+ *        Fails with already frozen, but not composite objects.
+ *        If the function errors half way through, the input object may be partially mutated and frozen. 
+ *        Use with caution.
  * @returns a deeply immutable version of the input object with a consistent hash.
  */
-function Composite(obj) {
-  return CompositeImpl(obj);
-}
-
-/**
- * Typically used as a wrapper around JSON object: Composite.consume(JSON.parse(...)).
- * Runs in overwrite/mutate mode. Reuse, mutates and freezes all objects to avoid creating new objects.
- * Fails with already frozen, but not composite objects.
- * If the function errors half way through, the input object may be partially mutated and frozen. 
- * Use with caution.
- * @param {*} obj plain data objects, arrays, primitives or symbols; accessors and proxies are unsupported. 
- * @returns a deeply immutable version of the input object with a consistent hash.
- */
-Composite.consume = function consume(obj) {
-  return CompositeImpl(obj, true);
+ function Composite(obj, consume = false) {
+  return CompositeImpl(obj, consume);
 }
 
 function CompositeImpl(obj, consume = false, seen = new Set()) {
@@ -184,19 +176,28 @@ Composite.is = function is(v) {
     typeof v === 'bigint' || HASHCACHE.getHash(v) !== undefined;
 }
 
-function replaceObjectInsideCompositable(obj, key, reuseNonFrozen) {
+function getImpl(obj, path, end = path.length) {
+  for (let i = 0; obj != null && i < end; i++)
+    obj = obj[path[i]];
+  return obj;
+}
+
+function replaceObjectInsideCompositable(obj, nextKey, reuseNonFrozen) {
   if (obj && typeof obj === "object") {
     if (reuseNonFrozen && !Object.isFrozen(obj))
       return obj;
     const proto = Object.getPrototypeOf(obj);
     const isArray = proto === Array.prototype;
-    return Object.assign(isArray ? Array(obj.length) : Object.create(proto), obj);
+    const res = isArray ? Array(obj.length) : Object.create(proto);
+    for (const key of Reflect.ownKeys(obj))
+      res[key] = obj[key];
+    return res;
   }
-  const t = typeof key;
+  const t = typeof nextKey;
   if (t !== 'string' && t !== 'number')
     return {};
-  const n = Number(key);
-  if (Number.isInteger(n) && n >= 0 && n < 0xFFFFFFFF && key === String(n))
+  const n = Number(nextKey);
+  if (Number.isInteger(n) && n >= 0 && n < 0xFFFFFFFF && String(nextKey) === String(n))
     return [];
   return {};
 }
@@ -212,85 +213,28 @@ function setImpl(obj, path, value, consume) {
   return root;
 }
 
-Composite.set = function set(root, path, value) {
-  if (!Composite.is(root)) throw new TypeError("Composite.set: Root must be a composite.");
-  if (!Array.isArray(path) || path.length < 1) throw new TypeError("Composite.set: Path must be a non-empty array.");
-  return Composite.consume(setImpl(root, path, Composite(value), false));
+Composite.rawSet = function set(root, path, value, consumeValue = false) {
+  if (!Composite.is(root)) throw new TypeError("Composite: Root must be a composite.");
+  if (!Array.isArray(path) || path.length < 1 || path.some(k => String(k) === "__proto__")) throw new TypeError("Composite: Path must be a non-empty array.");
+  return Composite(setImpl(root, path, Composite(value, consumeValue), true));
 };
 
-function getImpl(obj, path) {
-  for (let i = 0; obj != null && i < path.length; i++)
-    obj = obj[path[i]];
-  return obj;
-}
-function deleteImpl(obj, path, consume) {
-  let root = obj = replaceObjectInsideCompositable(obj, path[0], consume);
-  for (let i = 0; i < path.length - 1; i++) {
-    const key = path[i];
-    if (key === "__proto__") throw new TypeError("Composite: Access to __proto__ is not allowed.");
-    obj = obj[key] = replaceObjectInsideCompositable(obj[key], path[i + 1], consume);
-  }
-  if (path[path.length - 1] === "__proto__") throw new TypeError("Composite: Access to __proto__ is not allowed.");
-  delete obj[path[path.length - 1]];
-  return root;
-}
-
-function placeTrace(skip = 0, SKIPS = []) {
-  const stack = new Error().stack.split("\n").map(line => line.split("(")[0].trim().split(" ").pop());
-  for (let i = skip + 1; i < stack.length - 1; i++) {
-    const name = stack[i];
-    if (!SKIPS.includes(name))
-      return name;
-  }
-  return stack.at(-1);
-}
-const { register, unregister, getHistory, log } = (function () {
-
-  const history = new Map();
-  function log(oldObj, obj, path) {
-    if (oldObj === obj) return;
-    const tail = history.get(oldObj);
-    if (!tail) return;
-    const caller = placeTrace(2, ["rawSet", "rawDelete", "Object.apply", "Composite.rawSet", "Composite.rawDelete", "anonymous"]);
-    tail.unshift({ obj, path, caller, time: performance.now() });
-    history.set(obj, tail);
-    history.delete(oldObj);
-  }
-  function register(obj) {
-    if (history.has(obj)) throw new Error("an identical root already exists");
-    history.set(obj, [{ obj, path: [], caller: placeTrace(2, ["register", "anonymous"]), time: performance.now() }]);
-  }
-  function unregister(now) {
-    history.delete(now);
-  }
-
-  function getHistory(root) {
-    return history.get(root).slice();
-  }
-  return { register, unregister, getHistory, log };
-})();
-
-const rawSetOg = setImpl;
-const rawDeleteOg = deleteImpl;
-let skipLog;
-
-setImpl = function (root, path, value, consume) {
-  const newRoot = rawSetOg(root, path, value, consume);
-  !skipLog && log(root, newRoot, path);
-  return newRoot;
+Composite.rawDelete = function rawDelete(root, path) {
+  if (!Composite.is(root)) throw new TypeError("Composite: Root must be a composite.");
+  if (!Array.isArray(path) || path.length < 1 || path.some(k => String(k) === "__proto__")) throw new TypeError("Composite: Path must be a non-empty array.");
+  const parent = path.length > 1 ? getImpl(root, path, path.length - 1) : root;
+  const key = path[path.length - 1];
+  if (parent == null || typeof parent !== "object" || !Object.hasOwn(parent, key))
+    return root;
+  const clone = replaceObjectInsideCompositable(parent, "ignore", false);
+  delete clone[key];
+  if (path.length === 1)
+    return Composite(clone, true);
+  return Composite.rawSet(root, path.slice(0, -1), clone, true);
 };
 
-deleteImpl = function (root, path, consume) {
-  skipLog = true;
-  const newRoot = rawDeleteOg(root, path, consume);
-  skipLog = false;
-  log(root, newRoot, path);
-  return newRoot;
-};
-
-Object.assign(Composite, { register, unregister, getHistory });
-
-const Lense = FN => function (root) {
+const Lense = (FN, skip) => function (root, consumeValue = false) {
+  if (!Composite.is(root)) throw new TypeError("Composite: Root must be a composite in Composite.operations.");
   let spent = false;
   function proxy(path = []) {
     return new Proxy(() => { }, {
@@ -301,110 +245,42 @@ const Lense = FN => function (root) {
       apply(_, __, args) {
         if (spent) throw new Error("Proxy already consumed");
         spent = true;
-        return Composite(FN(root, path, args));
+        if (skip)
+          return FN(root, path, args);
+        return Composite.rawSet(root, path, FN(root, path, args), consumeValue);
       }
     });
   }
   return proxy();
 }
 
-const { map, reduce, flatMap } = Array.prototype;
-Composite.set = Lense((root, path, [value]) => setImpl(root, path, value));
-Composite.delete = Lense((root, path) => deleteImpl(root, path));
-Composite.map = Lense((root, path, args) => setImpl(root, path, map.call(getImpl(root, path), ...args)));
-Composite.flatMap = Lense((root, path, args) => setImpl(root, path, flatMap.call(getImpl(root, path), ...args)));
-Composite.mapEntries = Lense((root, path, args) => setImpl(root, path, Object.fromEntries(map.call(Object.entries(getImpl(root, path)), ...args))));
-// same as: args.length > 1 ? reduce.call(actual, args[0], args[1]) : reduce.call(actual, args[0]);
-Composite.reduce = Lense((root, path, args) => setImpl(root, path, reduce.call(getImpl(root, path), ...args)));
-
-// Composite.from = function from(root) {
-//   if (!Composite.is(root)) throw new TypeError("Composite.from: Root must be a composite.");
-//   const at = path => new Proxy(() => { }, {
-//     get: (_, key) => at([...path, key]),
-//     apply: (_, __, [value]) => (root = Composite.set(root, path, value)),
-//   });
-//   return at([]);
-// }
-
-// function resolvePath(obj, path, skips = 0) {
-//   for (let i = 0, stop = path.length - skips; obj && i < stop; i++)
-//     obj = obj[path[i]];
-//   return typeof obj === 'object' ? obj : undefined;
-// }
-
-// const mutators = new Set(["copyWithin", "fill", "pop", "push", "reverse", "shift", "sort", "splice", "unshift"]);
-
-// function doApply(root, path, args) {
-//   //draft() means to return the root object. cannot contain any arguments.
-//   if (!path.length && args.length)
-//     throw new TypeError("Composite.open: const $ = Composite.open(root); $.some.ops(value); $() will close the root. You cannot pass arguments to this call.");
-//   if (!path.length)
-//     return root;
-
-//   const key = path.at(-1);
-//   const method = Array.prototype.getOwnPropertyDescriptor(key);
-//   if (method) {
-//     let target1, target2;
-//     target1 = target2 =  resolvePath(root, path, 1);
-//     if (mutators.has(key) && Object.isFrozen(target1))
-//       target2 = replaceObjectInsideCompositable(target1, 1, true);
-//     let result;
-//     if (method.value && typeof method.value === "function") {
-//       result = method.value.apply(target1, args);
-//     } else if (!args.length) {
-//       result = method.get.apply(target1);
-//     } else if (args.length === 1) {
-//       result = method.set.apply(target1, args);
-//     } else {
-//       throw new TypeError("Composite.open: Two or more arguments is only allowed for Array.prototype methods. All other properties can be read with no arguments or set with one argument.");
-//     }
-//     if(target1 === target2)
-//       return root;
-//     return root = setImpl(root, path.slice(0,-1), target2, true);
-//   }
-// }
-
-// Composite.open = function open(root) {
-//   if (!Composite.is(root)) throw new TypeError("Composite.open: Root must be a composite.");
-
-//   const at = path => new Proxy(() => { }, {
-//     get: (_, key) => key === "then" ? undefined : at([...path, key]),  //i still don't understand why then is necessary here as we only work with composites?
-//     apply: (_, __, args) => {
-//       //if there is no path and args, then we are closing the root and returning it? This is the only way to get the root back?
-//       //this is also the only allowed time to have empty arguments? Maybe, I am not sure.
-//       //I think that this pattern is a little problematic.
-//       if (!path.length)
-//         throw new TypeError("Composite.open: Invalid call on root.");
-
-//       const method = Array.prototype.getOwnPropertyDescriptor(path.at(-1));        //all these names should be preserved
-//       if (method) {
-//         const key = path.pop();
-//         const isArrayMethod = Array.prototype.hasOwnProperty(key);
-//         let res, home = resolvePath(root, path) ?? (isArrayMethod ? [] : {});
-//         if (mutators.has(key))
-//           home = replaceObjectInsideCompositable(home, "", true);
-//         if (method.value && typeof method.value === "function")
-//           res = method.value.apply(home, args);
-//         else if (!args.length)
-//           res = home[key];
-//         else if (args.length === 1)
-//           res = home[key] = args[0];
-//         else
-//           throw new TypeError("Composite.open: Invalid call.");
-//         root = setImpl(root, path, home, true);
-//         return res;
-//       }
-//       if (!args.length) return get(path);
-//       if (args.length === 1) return root = setImpl(root, path, args[0], true);
-//       throw new TypeError("Composite.open: Invalid call.");
-//     },
-//     deleteProperty: (_, key) => {
-//       const clone = replaceObjectInsideCompositable(resolvePath(root, path), "", true); //test that this can never be null
-//       delete clone[key];
-//       root = setImpl(root, path, clone, true);
-//       return true;
-//     },
-//   });
-
-//   return at([]);
-// };
+Composite.set = Lense((root, path, args) => {
+  if (args.length !== 1) throw new TypeError("Composite.set: Only one argument is allowed.");
+  return args[0]
+});
+Composite.delete = Lense((root, path, args) => {
+  if (args.length !== 0) throw new TypeError("Composite.delete: No arguments are allowed.");
+  return Composite.rawDelete(root, path);
+}, true);
+Composite.transform = Lense((root, path, args) => {
+  if (args.length !== 1) throw new TypeError("Composite.transform: Only one argument is allowed.");
+  return args[0](getImpl(root, path));
+});
+const PureArrayFns = ["map", "reduce", "flatMap", "filter", "reduceRight"];
+for (const name of PureArrayFns) {
+  Composite[name] = Lense((root, path, args) => {
+    const arr = getImpl(root, path);
+    if (!Array.isArray(arr)) throw new TypeError("Composite: Target must be an array in Composite.operations.");
+    return Array.prototype[name].call(arr, ...args);
+  });
+}
+const DirtyArrayFns = ["sort", "reverse", "fill", "copyWithin", "push", "pop", "shift", "unshift", "splice"];
+for (const name of DirtyArrayFns) {
+  Composite[name] = Lense((root, path, args) => {
+    const arr = getImpl(root, path);
+    if (!Array.isArray(arr)) throw new TypeError("Composite: Target must be an array in Composite.operations.");
+    const copy = replaceObjectInsideCompositable(arr, "ignore", false);
+    Array.prototype[name].call(copy, ...args);
+    return copy;
+  });
+}

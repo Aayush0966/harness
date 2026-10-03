@@ -1,0 +1,4 @@
+[2026-10-03T10:14:03Z] INFO  [billing-service] trace_id=tr-98102 user_id=u_771 Charge $49.00 authorized via Stripe.
+[2026-10-03T10:14:15Z] ERROR [billing-service] trace_id=tr-98104 user_id=u_903 Upstream auth check failed: HTTP 503 from auth-service. Rejecting invoice payment.
+[2026-10-03T10:14:16Z] ERROR [billing-service] trace_id=tr-98105 user_id=u_904 Upstream auth check failed: HTTP 503 from auth-service. Rejecting subscription renewal.
+[2026-10-03T10:14:20Z] WARN  [billing-service] trace_id=tr-98106 Deadlock detected in account balance reconciliation queue due to surge in unauthenticated retries.

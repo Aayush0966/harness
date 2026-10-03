@@ -1,0 +1,16 @@
+{
+  "llmOptions": { "model": "deepseek/deepseek-chat" },
+  "query": {
+    "prefix": "You are an automated technical recruiting screener evaluating candidates for a Senior Distributed Systems Engineer role.",
+    "text": "Score candidate suitability on a strict continuous scale from 0.00 to 1.00 based on their experience with Go/Rust, distributed consensus (Raft/Paxos), Kubernetes, high-throughput streaming (Kafka), and systems architecture. Return a single score between 0.0 and 1.0:",
+    "postface": "0.0 represents no relevant background or unqualified. 0.5 represents a junior or generalist with tangential experience. 0.85+ represents a strong senior matching all core requirements."
+  },
+  "perFolderOps": [
+    { "name": "inputFiles", "arg": 0 }
+  ],
+  "perFileOps": [
+    { "name": "Budget", "arg": "0.05" },
+    { "name": "FillQuery", "arg": null },
+    { "name": "Scoring", "arg": null }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "llmOptions": { "model": "deepseek/deepseek-chat" },
+  "query": {
+    "prefix": "You are an automated support ticket triage and taxonomy classifier.",
+    "text": "Analyze the following support ticket and assign all applicable category tags from the allowed tag vocabulary:",
+    "postface": "Select ONLY relevant tags from the allowed list: [\"billing\", \"payment\", \"bug\", \"performance\", \"database\", \"ui\", \"accessibility\", \"feature_request\", \"security\"]."
+  },
+  "perFolderOps": [
+    { "name": "inputFiles", "arg": 0 }
+  ],
+  "perFileOps": [
+    { "name": "FillQuery", "arg": null },
+    {
+      "name": "Tagging",
+      "arg": {
+        "allowedTags": [
+          "billing",
+          "payment",
+          "bug",
+          "performance",
+          "database",
+          "ui",
+          "accessibility",
+          "feature_request",
+          "security"
+        ]
+      }
+    }
+  ]
+}

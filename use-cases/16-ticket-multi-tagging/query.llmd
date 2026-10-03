@@ -1,0 +1,12 @@
+${void ($.model = "deepseek/deepseek-chat")}
+${$._perFolderOps = ["inputFiles"]}
+${$._perFileOps   = ["FillQuery", "Tagging"]}
+${$._allowedTags  = ["billing", "payment", "bug", "performance", "database", "ui", "accessibility", "feature_request", "security"]}
+
+You are an automated support ticket triage and taxonomy classifier.
+
+Analyze the following support ticket and assign all applicable category tags from the allowed tag vocabulary:
+
+${$.data}
+
+Select ONLY relevant tags from the allowed list: ${JSON.stringify($._allowedTags)}.

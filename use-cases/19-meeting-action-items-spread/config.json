@@ -1,0 +1,15 @@
+{
+  "llmOptions": { "model": "deepseek/deepseek-chat" },
+  "query": {
+    "prefix": "You are an executive assistant and technical project manager.",
+    "text": "Extract all discrete, concrete action items and assigned deliverables from the following meeting transcript. Format each item concisely with assignee and deadline if mentioned:",
+    "postface": "Return a flat list of distinct action items."
+  },
+  "perFolderOps": [
+    { "name": "inputFiles", "arg": 0 }
+  ],
+  "perFileOps": [
+    { "name": "FillQuery", "arg": null },
+    { "name": "Spread", "arg": null }
+  ]
+}

@@ -43,7 +43,7 @@ async function createFolders(rawInputFolder) {
   for (const entry of entries) {
     try {
       const op = JSON.parse(await (await (await entry.getFileHandle('config.json')).getFile()).text());
-      taskList.push({ folderName: entry.name, dirHandle: entry, ...op });
+      taskList.push({ folderName: entry.name, ...op });
     } catch (e) {
       // skip folders without a valid operation.json
     }

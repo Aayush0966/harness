@@ -17,7 +17,11 @@
   <script src="folder.js"></script>
   <script src="transducers.js"></script>
   <script src="engine.js"></script>
-  <script src="libview.js"></script>
+  <!-- html tag: identity tagged template — enables HTML syntax highlighting in editors and on GitHub. -->
+  <script>const html = (strings, ...values) => strings.reduce((acc, str, i) => acc + (values[i - 1] ?? '') + str);</script>
+  <script src="views/default-view.js"></script>
+  <script src="views/top-bar-view.js"></script>
+  <script src="views/side-bar-view.js"></script>
   <script>
     let steps = [], parentDir = null;
     let history = [], transducers = {}, uixComponents = {};
@@ -104,8 +108,7 @@
         parentDir = await showDirectoryPicker({ mode: 'readwrite' });
         steps = (await createFolders(parentDir)).taskList;
         mountView();
-        const initialFolder = Composite.consume(await readFolder(parentDir));
-        Composite.register(initialFolder);
+        const initialFolder = Composite(await readFolder(parentDir), true);
         orchestrate({ folder: initialFolder });
       } catch (e) {
         if (e.name !== 'AbortError') throw e;
@@ -134,12 +137,10 @@
     );
     const file = allFiles.find(f => names.length === 0 || names.includes(f.filename));
     if (!file) {
-      this.textContent = 'No files found.';
+      this.innerHTML = html\`<p>No files found.</p>\`;
       return;
     }
-    this.textContent = typeof file.data === 'string' 
-      ? file.data 
-      : JSON.stringify(file.data, null, 2);
+    this.innerHTML = html\`<pre>\${typeof file.data === 'string' ? file.data : JSON.stringify(file.data, null, 2)}</pre>\`;
   }
 }`;
 
@@ -154,7 +155,11 @@
       '3. Your code MUST be 100% pure. Do not use external closures or global variables; everything must be self-contained. ' +
       '4. STRICT REUSE: You MUST check availableViews first. If an existing view fits the goal, put its name in "view" and set "newView" to null. ' +
       '5. ONLY write a "newView" if absolutely no existing view can handle the task. Reply with JSON only. ' +
-      '6. HIERARCHY: Files are nested inside step subdirectories. Flatten the tree to find files.';
+      '6. HIERARCHY: Files are nested inside step subdirectories. Flatten the tree to find files. ' +
+      '7. HTML TEMPLATE STRINGS: Every innerHTML template literal MUST be tagged with html (e.g. html`<div>...</div>`). Do NOT declare or import html — it is already a global. Do not include `const html = ...` in your source.  ' +
+      '8. SELECTION: selectedFiles must be bare filenames only (e.g. "candidate-senior-distributed.txt") — no folder prefix, no path separators. Matched against f.filename which is always the bare name. ' +
+      '9. DATA SHAPE: file.data is ALWAYS a string. It may be JSON text (e.g. ["bug","ui"] or {"a":1}). Read the preview field in the tree to learn the real shape, JSON.parse it inside try/catch, and never assume fields like .tags or .content unless the preview shows them. ' +
+      '10. FILTERING: Never filter files by invented properties like f.step, f.folder, or f.kind. The only safe filter is f.filename. To scope to a use-case, list the exact filenames in selectedFiles.';
 
     async function smartPrompt(goal) {
       if (!goal || history.length === 0) return;
@@ -164,7 +169,11 @@
         {
           role: 'user', content: JSON.stringify({
             goal, currentView: getParam('view'), availableViews: Object.keys(uixComponents),
-            folderName: history[history.length - 1].folderName, folderChildren: history[history.length - 1].children?.map(c => ({ kind: c.kind, ...(c.kind === 'directory' ? { folderName: c.folderName } : { filename: c.filename }) })),
+            folderName: history[history.length - 1].folderName,
+            tree: ((describe = n => ('folderName' in n)
+              ? { folderName: n.folderName, children: (n.children || []).map(describe) }
+              : { filename: n.filename, preview: String(n.data ?? '').slice(0, 150) }
+            ) => describe(history[history.length - 1]))(),
             referenceView: smartPromptReferenceView,
           }) + '\n\nReply: { "view": "", "selectedFiles": [...], "newView": null | { "name": "", "source": "" } }'
         },
@@ -175,7 +184,10 @@
         const { view, selectedFiles = [], newView } = JSON.parse(res.choices[0].message.content);
 
         if (newView && !customElements.get(newView.name)) {
-          const cls = eval(`(${newView.source})`);
+          const className = newView.source.match(/class\s+(\w+)/)?.[1];
+          const cls = className
+            ? new Function(`${newView.source}; return ${className};`)()
+            : eval(`(${newView.source})`);
           customElements.define(newView.name, cls);
           viewport.dispatchEvent(new CustomEvent('new-uix-component', { bubbles: true, detail: { name: newView.name, value: cls } }));
         }

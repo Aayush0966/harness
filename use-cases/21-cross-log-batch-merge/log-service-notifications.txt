@@ -1,0 +1,3 @@
+[2026-10-03T10:14:04Z] INFO  [notifications] trace_id=tr-98102 Sent payment confirmation email to u_771.
+[2026-10-03T10:14:17Z] WARN  [notifications] trace_id=tr-98104 Surge in 'Payment Failed' alerts queued: 120 messages in last 30s.
+[2026-10-03T10:14:18Z] ERROR [notifications] trace_id=tr-98105 SES rate limit reached on customer alerts. Throttling outbound SMS notifications.

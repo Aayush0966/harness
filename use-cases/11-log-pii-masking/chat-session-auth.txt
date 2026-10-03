@@ -1,8 +1,0 @@
-{
-  "hasPII": true,
-  "piiTypesFound": [
-    "email",
-    "API key"
-  ],
-  "sanitizedText": "Developer: My staging webhook keeps returning 403 forbidden.\nSupport: What endpoint and authorization header are you sending?\nDeveloper: I'm sending POST https://api.service.io/v1/events with Bearer [REDACTED_KEY]. My contact email is [EMAIL].\nSupport: Please rotate that key immediately! Live keys should never be used on staging endpoints."
-}

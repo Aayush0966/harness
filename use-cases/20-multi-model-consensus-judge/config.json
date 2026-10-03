@@ -1,0 +1,46 @@
+{
+  "llmOptions": { "model": "deepseek/deepseek-chat" },
+  "query": {
+    "prefix": "You are a Principal Cloud Architect proposing an infrastructure design.",
+    "text": "Design a high-availability solution for the following architectural challenge:",
+    "postface": "Provide an in-depth analysis and concrete solution. (Set winner to 0 in your output)."
+  },
+  "perFolderOps": [
+    { "name": "inputFiles", "arg": 0 }
+  ],
+  "perFileOps": [
+    {
+      "name": "MultiSearch",
+      "arg": {
+        "searchModels": [
+          "deepseek/deepseek-chat",
+          "google/gemini-2.5-flash"
+        ],
+        "judgeModel": "deepseek/deepseek-chat",
+        "judgeQuery": {
+          "prefix": "You are the Chief Technology Officer acting as a definitive evaluation judge.",
+          "text": "Review the candidate designs below submitted by independent models. Choose the winning design that is more reliable, cost-effective, and operationally sound. Set 'winner' to the index (0 or 1) of the best candidate:",
+          "postface": "Include your justification in 'analysis' and summarize the chosen architecture in 'solution'."
+        }
+      }
+    },
+    { "name": "FillQuery", "arg": null },
+    {
+      "name": "Json",
+      "arg": {
+        "name": "architecture_evaluation",
+        "strict": true,
+        "schema": {
+          "type": "object",
+          "properties": {
+            "winner": { "type": "integer" },
+            "analysis": { "type": "string" },
+            "solution": { "type": "string" }
+          },
+          "required": ["winner", "analysis", "solution"],
+          "additionalProperties": false
+        }
+      }
+    }
+  ]
+}

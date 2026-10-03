@@ -1,0 +1,20 @@
+{
+  "rootCauseService": "auth-service",
+  "affectedTraceIds": [
+    "tr-98103",
+    "tr-98104",
+    "tr-98105",
+    "tr-98106"
+  ],
+  "failureChain": [
+    "2026-10-03T10:14:05Z: Initial failure observed via Redis cluster latency spike (220ms) in auth-service (trace_id=tr-98103).",
+    "2026-10-03T10:14:12Z: Redis connection refused on auth-service (10.0.4.15:6379), causing token signing to abort (trace_id=tr-98104).",
+    "2026-10-03T10:14:14Z: Circuit breaker OPEN in auth-service for Redis master node, causing all session validations to fail with HTTP 503 (trace_id=tr-98105).",
+    "2026-10-03T10:14:15Z: Billing-service upstream auth check fails (HTTP 503), rejecting invoice payment (trace_id=tr-98104).",
+    "2026-10-03T10:14:16Z: Billing-service upstream auth check fails (HTTP 503), rejecting subscription renewal (trace_id=tr-98105).",
+    "2026-10-03T10:14:17Z: Notifications service observes surge in 'Payment Failed' alerts (120 messages in 30s) (trace_id=tr-98104).",
+    "2026-10-03T10:14:18Z: Notifications service hits SES rate limit, throttling outbound SMS alerts (trace_id=tr-98105).",
+    "2026-10-03T10:14:20Z: Billing-service deadlock detected in account balance reconciliation queue due to surge in unauthenticated retries (trace_id=tr-98106)."
+  ],
+  "remediation": "Investigate and stabilize Redis cluster in auth-service. Implement retry policies and circuit breaker tuning for Redis client connections. Scale billing-service reconciliation queue processing capacity. Monitor SES rate limits and implement rate limiting alerts in notifications service."
+}

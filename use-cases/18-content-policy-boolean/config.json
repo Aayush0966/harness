@@ -1,0 +1,15 @@
+{
+  "llmOptions": { "model": "deepseek/deepseek-chat" },
+  "query": {
+    "prefix": "You are a Trust & Safety automated moderation classifier.",
+    "text": "Determine whether the following user-submitted forum post violates community standards (specifically regarding harassment, hate speech, threats of violence, or deceptive phishing/malware links). Return true if it violates policy, or false if it is safe:",
+    "postface": "Be objective. Critical feedback, sharp debates, or technical complaints are NOT violations unless they cross into abuse, personal attacks, or scam links."
+  },
+  "perFolderOps": [
+    { "name": "inputFiles", "arg": 0 }
+  ],
+  "perFileOps": [
+    { "name": "FillQuery", "arg": null },
+    { "name": "Boolean", "arg": null }
+  ]
+}

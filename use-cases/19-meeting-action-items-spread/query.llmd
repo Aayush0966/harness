@@ -1,0 +1,14 @@
+${void ($.model = "deepseek/deepseek-chat")}
+${$._perFolderOps = ["inputFiles"]}
+${$._perFileOps   = ["FillQuery", "Spread"]}
+
+You are an executive assistant and technical project manager.
+
+Extract all discrete, concrete action items and assigned deliverables from the
+following meeting transcript. For each item, include the assignee and deadline
+if mentioned:
+
+${$.data}
+
+Return a flat list of distinct action items. Do not group them by theme or
+category — one item per line, in the order they were raised.

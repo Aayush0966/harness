@@ -1,7 +1,0 @@
-{
-  "churnRisk": true,
-  "primaryEmotion": "frustrated",
-  "recommendedAction": "immediate\nescalateToEngineeringLead",
-  "sentimentScore": -0.93,
-  "urgencyScore": 0.99
-}

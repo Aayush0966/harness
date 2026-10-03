@@ -53,7 +53,7 @@ async function runEngineOnJson(folder, taskList, rootCtx = {}) {
   for (let i = 0; i < taskList.length; i++) {
     const stepFolder = currentFolder.children?.find(c => c.kind === 'directory' && c.folderName === taskList[i].folderName) ?? currentFolder;
     const folderReducer = compileFolder(taskList[i], PerFileOps._root, rootCtx);
-    const updatedStepFolder = await folderReducer([], { ...taskList[i], folder: stepFolder }, i, taskList);
+    const updatedStepFolder = await folderReducer([], Composite({ ...taskList[i], folder: stepFolder }, true), i, taskList);
     const updatedChildren = currentFolder.children
       ? currentFolder.children.map(c => c.kind === 'directory' && c.folderName === taskList[i].folderName ? updatedStepFolder : c)
       : currentFolder.children;

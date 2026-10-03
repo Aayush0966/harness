@@ -1,0 +1,6 @@
+[
+  "Tom: Deploy MDM remediation profile to enforce encryption on 12 non-compliant workstations by this Friday",
+  "Lisa: Integrate Okta SCIM directory with GitHub Enterprise and deploy automated access revocation via PR by next Tuesday",
+  "Tom: Script rotation of AWS IAM access keys >90 days old and update KMS secrets manager by end of next week",
+  "Elena: Assemble policy evidence binder and upload vendor questionnaires to Vanta portal by next Friday"
+]
