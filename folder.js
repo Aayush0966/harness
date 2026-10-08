@@ -44,9 +44,7 @@ async function createFolders(rawInputFolder) {
     try {
       const body = await (await (await entry.getFileHandle('query.llmd')).getFile()).text();
       const template = compileLlmd(body);
-      const scratch = {};
-      template(scratch);
-      taskList.push({ folderName: entry.name, template, ...scratch });
+      taskList.push({ folderName: entry.name, template });
     } catch (e) {
       // skip folders without a valid query.llmd
     }
@@ -59,7 +57,7 @@ async function writeFolder(dirHandle, folderObj) {
     if (child.kind === 'directory') {
       const subDir = await dirHandle.getDirectoryHandle(child.folderName, { create: true });
       await writeFolder(subDir, child);
-    } else {
+    } else if (child.filename && child.data != null) {
       const w = await (await dirHandle.getFileHandle(child.filename, { create: true })).createWritable();
       await w.write(child.data);
       await w.close();

@@ -16,6 +16,33 @@ const llmd = (strings, ...values) =>
 const compileLlmd = body =>
   new Function('llmd', '$', 'return llmd`' + body.replace(/[`\\]/g, '\\$&') + '`').bind(null, llmd);
 
+// $ for one render pass: $.oneByOne(array) records the array and returns array[index].
+// Anything else (reads, `$.llmOptions = ...` assignments) hits the plain state object.
+const make$ = (data, index = 0, previous) => {
+  const state = { ...data, _previous: previous };
+  return new Proxy(state, {
+    get: (t, p) => p === 'oneByOne' ? array => (t._array ??= array)[index] : t[p],
+  });
+};
+
+// Probes the template once to find the oneByOne array, then renders and calls the LLM once per item.
+// Returns null if the template doesn't use $.oneByOne().
+async function runOneByOne(template, data) {
+  const probe = make$(data);
+  template(probe);
+  const items = probe._array;
+  if (!items) return null;
+
+  const results = [];
+  let previous;
+  for (let i = 0; i < items.length; i++) {
+    const prompt = template(make$(data, i, previous));
+    const res = await llm({ ...probe.llmOptions, messages: [{ role: 'user', content: prompt }] });
+    previous = res.choices?.[0]?.message?.content ?? '';
+    results.push({ item: items[i], prompt, response: previous });
+  }
+  return results;
+}
 
 const Transducer = (name, arg, dict) => {
   if (name in dict)
@@ -56,15 +83,17 @@ function compileFolder(taskList, innerMostCall, rootCtx = {}, groupCtx = {}) {
 // }
 
 async function runEngineOnJson(folder, taskList, rootCtx = {}) {
-  if (!taskList.length) return folder;
-  for (let i = 0; i < taskList.length; i++) {
-    const stepFolder = folder.children?.find(c => c.kind === 'directory' && c.folderName === taskList[i].folderName) ?? folder;
-    const folderReducer = compileFolder(taskList[i], PerFileOps._root, rootCtx);
-    const updatedStepFolder = await folderReducer([], Composite({ ...taskList[i], folder: stepFolder }, true), i, taskList);
-    const updatedChildren = folder.children
-      ? folder.children.map(c => c.kind === 'directory' && c.folderName === taskList[i].folderName ? updatedStepFolder : c)
-      : folder.children;
-    folder = Composite.set(folder).children(updatedChildren ?? folder.children);
+  for (const task of taskList) {
+    const stepFolder = folder.children?.find(c => c.kind === 'directory' && c.folderName === task.folderName) ?? folder;
+    const results = await runOneByOne(task.template, { ...rootCtx, ...task, folder: stepFolder });
+    const updatedChildren = (stepFolder.children ?? []).map(child => {
+      if (child.kind !== 'file') return child;
+      const r = results.find(r => r.item.filename === child.filename);
+      return r ? Composite.set(child).data(r.response) : child;
+    });
+    const updatedStep = Composite.set(stepFolder).children(updatedChildren);
+    folder = Composite.set(folder).children((folder.children ?? []).map(c =>
+      c.kind === 'directory' && c.folderName === task.folderName ? updatedStep : c));
   }
   return folder;
 }
